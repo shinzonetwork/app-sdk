@@ -46,12 +46,18 @@ A `SchemaApplierFromProvidedSchema` should be created with `NewSchemaApplierFrom
 
 ### Querying your defra instance
 
-Querying your defra instance is made much simpler using the `queryClient` in the defra package.
+Querying your defra instance is made much simpler using the query functions in the defra package.
 
-Create a client with:
+Query with either `QuerySingle` or `QueryArray` for individual objects or arrays. You'll need to provide a graphql query string and you'll need to define a struct representing the resulting object you hope to receive.
 
-`client, err := NewQueryClient(defraUrl)`
+`result, err := defra.QuerySingle[MyResultStruct](myNode, ctx, queryString)`
 or
-`client, err := NewQueryClientFromPort(defraPort)`
+`results, err := defra.QueryArray[MyResultStruct](myNode, ctx, queryString)`
 
-Then query with either `QuerySingle` or `QueryArray` for individual objects or arrays. You'll need to provide a graphql query string and you'll need to define a struct representing the resulting object you hope to receive.
+### Writing data to your defra instance
+
+Writing data to your defra instance is made simple using the `PostMutation` function in the defra package.
+
+`result, err := defra.PostMutation[MyResultStruct](ctx, myNode, mutationString)`
+
+This function will execute a GraphQL mutation and return the result unmarshaled into your specified struct type.

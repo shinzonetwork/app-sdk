@@ -10,7 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDefraQueryClient(t *testing.T) (*node.Node, *defraQueryClient) {
+// TestUser represents a simple user type for testing
+type TestUser struct {
+	Name string `json:"name"`
+}
+
+func setupTestQueryClient(t *testing.T) (*node.Node, *queryClient) {
 	// Create test config
 	testConfig := &config.Config{
 		DefraDB: config.DefraDBConfig{
@@ -40,34 +45,34 @@ func setupTestDefraQueryClient(t *testing.T) (*node.Node, *defraQueryClient) {
 	defraNode, err := StartDefraInstance(testConfig, schemaApplier)
 	require.NoError(t, err)
 
-	// Create Defra query client
-	queryClient, err := newDefraQueryClient(defraNode)
+	// Create query client
+	queryClient, err := newQueryClient(defraNode)
 	require.NoError(t, err)
 
 	return defraNode, queryClient
 }
 
-func TestNewDefraQueryClient(t *testing.T) {
+func TestNewQueryClient(t *testing.T) {
 	t.Run("valid node", func(t *testing.T) {
-		defraNode, _ := setupTestDefraQueryClient(t)
+		defraNode, _ := setupTestQueryClient(t)
 		defer defraNode.Close(context.Background())
 
-		client, err := newDefraQueryClient(defraNode)
+		client, err := newQueryClient(defraNode)
 		require.NoError(t, err)
 		assert.NotNil(t, client)
 		assert.Equal(t, defraNode, client.defraNode)
 	})
 
 	t.Run("nil node", func(t *testing.T) {
-		client, err := newDefraQueryClient(nil)
+		client, err := newQueryClient(nil)
 		require.Error(t, err)
 		assert.Nil(t, client)
 		assert.Contains(t, err.Error(), "defraNode parameter cannot be nil")
 	})
 }
 
-func TestDefraQueryClient_query(t *testing.T) {
-	defraNode, queryClient := setupTestDefraQueryClient(t)
+func TestQueryClient_query(t *testing.T) {
+	defraNode, queryClient := setupTestQueryClient(t)
 	defer defraNode.Close(context.Background())
 
 	ctx := context.Background()
@@ -110,8 +115,8 @@ func TestDefraQueryClient_query(t *testing.T) {
 	})
 }
 
-func TestDefraQueryClient_queryAndUnmarshal(t *testing.T) {
-	defraNode, queryClient := setupTestDefraQueryClient(t)
+func TestQueryClient_queryAndUnmarshal(t *testing.T) {
+	defraNode, queryClient := setupTestQueryClient(t)
 	defer defraNode.Close(context.Background())
 
 	ctx := context.Background()
@@ -142,8 +147,8 @@ func TestDefraQueryClient_queryAndUnmarshal(t *testing.T) {
 	})
 }
 
-func TestDefraQueryClient_getDataField(t *testing.T) {
-	defraNode, queryClient := setupTestDefraQueryClient(t)
+func TestQueryClient_getDataField(t *testing.T) {
+	defraNode, queryClient := setupTestQueryClient(t)
 	defer defraNode.Close(context.Background())
 
 	ctx := context.Background()
@@ -173,8 +178,8 @@ func TestDefraQueryClient_getDataField(t *testing.T) {
 	})
 }
 
-func TestDefraQueryClient_queryInto(t *testing.T) {
-	defraNode, queryClient := setupTestDefraQueryClient(t)
+func TestQueryClient_queryInto(t *testing.T) {
+	defraNode, queryClient := setupTestQueryClient(t)
 	defer defraNode.Close(context.Background())
 
 	ctx := context.Background()
@@ -197,8 +202,8 @@ func TestDefraQueryClient_queryInto(t *testing.T) {
 	})
 }
 
-func TestDefraQueryClient_queryDataInto(t *testing.T) {
-	defraNode, queryClient := setupTestDefraQueryClient(t)
+func TestQueryClient_queryDataInto(t *testing.T) {
+	defraNode, queryClient := setupTestQueryClient(t)
 	defer defraNode.Close(context.Background())
 
 	ctx := context.Background()
@@ -263,8 +268,8 @@ func TestDefraQueryClient_queryDataInto(t *testing.T) {
 	})
 }
 
-func TestDefraQuerySingle(t *testing.T) {
-	defraNode, _ := setupTestDefraQueryClient(t)
+func TestQuerySingle(t *testing.T) {
+	defraNode, _ := setupTestQueryClient(t)
 	defer defraNode.Close(context.Background())
 
 	ctx := context.Background()
@@ -290,7 +295,7 @@ func TestDefraQuerySingle(t *testing.T) {
 			}
 		`
 
-		user, err := DefraQuerySingle[TestUser](defraNode, ctx, query)
+		user, err := QuerySingle[TestUser](defraNode, ctx, query)
 		require.NoError(t, err)
 		assert.Equal(t, "Jane Doe", user.Name)
 	})
@@ -304,14 +309,14 @@ func TestDefraQuerySingle(t *testing.T) {
 			}
 		`
 
-		user, err := DefraQuerySingle[TestUser](defraNode, ctx, query)
+		user, err := QuerySingle[TestUser](defraNode, ctx, query)
 		require.NoError(t, err) // No error when no results found, just empty result
 		assert.Empty(t, user.Name)
 	})
 }
 
-func TestDefraQueryArray(t *testing.T) {
-	defraNode, _ := setupTestDefraQueryClient(t)
+func TestQueryArray(t *testing.T) {
+	defraNode, _ := setupTestQueryClient(t)
 	defer defraNode.Close(context.Background())
 
 	ctx := context.Background()
@@ -339,7 +344,7 @@ func TestDefraQueryArray(t *testing.T) {
 			}
 		`
 
-		userArray, err := DefraQueryArray[TestUser](defraNode, ctx, query)
+		userArray, err := QueryArray[TestUser](defraNode, ctx, query)
 		require.NoError(t, err)
 		assert.Len(t, userArray, 3) // 3 new users created in this test
 
@@ -362,7 +367,7 @@ func TestDefraQueryArray(t *testing.T) {
 			}
 		`
 
-		userArray, err := DefraQueryArray[TestUser](defraNode, ctx, query)
+		userArray, err := QueryArray[TestUser](defraNode, ctx, query)
 		require.NoError(t, err)
 		assert.Len(t, userArray, 1)
 		assert.Equal(t, "Alice", userArray[0].Name)

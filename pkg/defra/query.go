@@ -9,24 +9,24 @@ import (
 	"github.com/sourcenetwork/defradb/node"
 )
 
-// defraQueryClient provides a clean interface for executing GraphQL queries against DefraDB using the direct client
-type defraQueryClient struct {
+// queryClient provides a clean interface for executing GraphQL queries against DefraDB using the direct client
+type queryClient struct {
 	defraNode *node.Node
 }
 
-// newDefraQueryClient creates a new GraphQL query client using the Defra node directly
-func newDefraQueryClient(defraNode *node.Node) (*defraQueryClient, error) {
+// newQueryClient creates a new GraphQL query client using the Defra node directly
+func newQueryClient(defraNode *node.Node) (*queryClient, error) {
 	if defraNode == nil {
 		return nil, fmt.Errorf("defraNode parameter cannot be nil")
 	}
 
-	return &defraQueryClient{
+	return &queryClient{
 		defraNode: defraNode,
 	}, nil
 }
 
 // query executes a GraphQL query using the Defra client directly and returns the raw result
-func (c *defraQueryClient) query(ctx context.Context, query string) (interface{}, error) {
+func (c *queryClient) query(ctx context.Context, query string) (interface{}, error) {
 	if query == "" {
 		return nil, fmt.Errorf("query parameter is empty")
 	}
@@ -34,7 +34,7 @@ func (c *defraQueryClient) query(ctx context.Context, query string) (interface{}
 	result := c.defraNode.DB.ExecRequest(ctx, query)
 	gqlResult := result.GQL
 
-	if gqlResult.Errors != nil && len(gqlResult.Errors) > 0 {
+	if len(gqlResult.Errors) > 0 {
 		return nil, fmt.Errorf("graphql errors: %v", gqlResult.Errors)
 	}
 
@@ -42,7 +42,7 @@ func (c *defraQueryClient) query(ctx context.Context, query string) (interface{}
 }
 
 // queryAndUnmarshal executes a GraphQL query and unmarshals the result into the provided interface
-func (c *defraQueryClient) queryAndUnmarshal(ctx context.Context, query string, result interface{}) error {
+func (c *queryClient) queryAndUnmarshal(ctx context.Context, query string, result interface{}) error {
 	data, err := c.query(ctx, query)
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (c *defraQueryClient) queryAndUnmarshal(ctx context.Context, query string, 
 
 // getDataField extracts the data from a GraphQL response
 // For the Defra client, the data is returned directly, not wrapped in a "data" field
-func (c *defraQueryClient) getDataField(ctx context.Context, query string) (map[string]interface{}, error) {
+func (c *queryClient) getDataField(ctx context.Context, query string) (map[string]interface{}, error) {
 	data, err := c.query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute query: %w", err)
@@ -74,7 +74,7 @@ func (c *defraQueryClient) getDataField(ctx context.Context, query string) (map[
 }
 
 // queryInto executes a GraphQL query and unmarshals the result into a struct of the specified type
-func (c *defraQueryClient) queryInto(ctx context.Context, query string, result interface{}) error {
+func (c *queryClient) queryInto(ctx context.Context, query string, result interface{}) error {
 	data, err := c.query(ctx, query)
 	if err != nil {
 		return err
@@ -91,7 +91,7 @@ func (c *defraQueryClient) queryInto(ctx context.Context, query string, result i
 
 // queryDataInto executes a GraphQL query and unmarshals only the "data" field into a struct
 // This function handles both single objects and arrays in the response
-func (c *defraQueryClient) queryDataInto(ctx context.Context, query string, result interface{}) error {
+func (c *queryClient) queryDataInto(ctx context.Context, query string, result interface{}) error {
 	data, err := c.query(ctx, query)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %w", err)
@@ -171,11 +171,11 @@ func (c *defraQueryClient) queryDataInto(ctx context.Context, query string, resu
 	return json.Unmarshal(dataBytes, result)
 }
 
-// DefraQuerySingle executes a GraphQL query and returns a single item of the specified type
+// QuerySingle executes a GraphQL query and returns a single item of the specified type
 // This is useful when you expect a single object back (not an array)
-func DefraQuerySingle[T any](defraNode *node.Node, ctx context.Context, query string) (T, error) {
+func QuerySingle[T any](defraNode *node.Node, ctx context.Context, query string) (T, error) {
 	var result T
-	client, err := newDefraQueryClient(defraNode)
+	client, err := newQueryClient(defraNode)
 	if err != nil {
 		return result, err
 	}
@@ -183,11 +183,11 @@ func DefraQuerySingle[T any](defraNode *node.Node, ctx context.Context, query st
 	return result, err
 }
 
-// DefraQueryArray executes a GraphQL query and returns an array of the specified type
+// QueryArray executes a GraphQL query and returns an array of the specified type
 // This is useful when you expect an array of objects back
-func DefraQueryArray[T any](defraNode *node.Node, ctx context.Context, query string) ([]T, error) {
+func QueryArray[T any](defraNode *node.Node, ctx context.Context, query string) ([]T, error) {
 	var result []T
-	client, err := newDefraQueryClient(defraNode)
+	client, err := newQueryClient(defraNode)
 	if err != nil {
 		return result, err
 	}
