@@ -1,0 +1,45 @@
+package defra
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/sourcenetwork/defradb/client"
+	"github.com/sourcenetwork/defradb/node"
+)
+
+func bootstrapIntoPeers(configuredBootstrapPeers []string) ([]client.PeerInfo, []error) {
+	peers := []client.PeerInfo{}
+	errors := []error{}
+
+	for i, peer := range configuredBootstrapPeers {
+		parts := strings.Split(peer, "/p2p/")
+		if len(parts) != 2 {
+			errors = append(errors, fmt.Errorf("Peer at index %d is invalid and will be skipped. Given: %v", i, configuredBootstrapPeers))
+		}
+		address := parts[0]
+		peerID := parts[1]
+
+		peerInfo := client.PeerInfo{
+			Addresses: []string{address},
+			ID:        peerID,
+		}
+		peers = append(peers, peerInfo)
+	}
+
+	return peers, errors
+}
+
+func connectToPeers(ctx context.Context, defraNode *node.Node, peers []client.PeerInfo) []error {
+	errors := []error{}
+
+	for i, peer := range peers {
+		err := defraNode.DB.Connect(ctx, peer)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("Error connecting to peer %d with info %v: %v", i, peer, err))
+		}
+	}
+
+	return errors
+}
