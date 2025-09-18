@@ -225,8 +225,9 @@ func TestQueryClient_queryDataInto(t *testing.T) {
 		}
 	`
 
-	_, err := PostMutation[map[string]interface{}](ctx, defraNode, createUserQuery)
+	user, err := PostMutation[TestUser](ctx, defraNode, createUserQuery)
 	require.NoError(t, err)
+	require.Equal(t, "John Doe", user.Name)
 
 	t.Run("query data into slice", func(t *testing.T) {
 		query := `
