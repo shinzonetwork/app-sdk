@@ -38,9 +38,11 @@ You can, of course, also construct or modify a config.Config object by hand.
 
 #### 2. Schema Applier
 
-You will need to provide an implementation of the `SchemaApplier` interface. Currently, we provide a default implementation of the `SchemaApplier` interface: `DefaultSchemaApplier`.
+You will need to provide an implementation of the `SchemaApplier` interface. Currently, we provide implementations of the `SchemaApplier` interface: `SchemaApplierFromFile` and `SchemaApplierFromProvidedSchema`.
 
-When creating a `DefaultSchemaApplier`, you may optionally provide a `DefaultPath` string where your schema resides - this should be a relative path - or you can place your schema in `schema/schema.graphql` and provide no `DefaultPath`.
+When creating a `SchemaApplierFromFile`, you may optionally provide a `DefaultPath` string where your schema resides - this should be a relative path - or you can place your schema in `schema/schema.graphql` and provide no `DefaultPath`.
+
+A `SchemaApplierFromProvidedSchema` should be created with `NewSchemaApplierFromProvidedSchema`, providing it with a schema in string format - helpful for tests or if you've already read your schema from a file.
 
 ### Querying your defra instance
 

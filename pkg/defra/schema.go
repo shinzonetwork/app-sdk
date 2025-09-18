@@ -22,11 +22,11 @@ func (schema *MockSchemaApplierThatSucceeds) ApplySchema(ctx context.Context, de
 
 const defaultPath = "schema/schema.graphql"
 
-type DefaultSchemaApplier struct {
+type SchemaApplierFromFile struct {
 	DefaultPath string
 }
 
-func (schema *DefaultSchemaApplier) ApplySchema(ctx context.Context, defraNode *node.Node) error {
+func (schema *SchemaApplierFromFile) ApplySchema(ctx context.Context, defraNode *node.Node) error {
 	logger.Sugar.Debug("Applying schema...")
 
 	if len(schema.DefaultPath) == 0 {
@@ -44,5 +44,22 @@ func (schema *DefaultSchemaApplier) ApplySchema(ctx context.Context, defraNode *
 	}
 
 	_, err = defraNode.DB.AddSchema(ctx, string(schemaBytes))
+	return err
+}
+
+type SchemaApplierFromProvidedSchema struct {
+	ProvidedSchema string
+}
+
+func NewSchemaApplierFromProvidedSchema(schema string) *SchemaApplierFromProvidedSchema {
+	return &SchemaApplierFromProvidedSchema{
+		ProvidedSchema: schema,
+	}
+}
+
+func (schema *SchemaApplierFromProvidedSchema) ApplySchema(ctx context.Context, defraNode *node.Node) error {
+	logger.Sugar.Debug("Applying schema...")
+
+	_, err := defraNode.DB.AddSchema(ctx, string(schema.ProvidedSchema))
 	return err
 }
