@@ -34,7 +34,6 @@ func setupTestQueryClient(t *testing.T) (*node.Node, *queryClient) {
 		},
 	}
 
-	// Create schema applier with basic User schema
 	schemaApplier := NewSchemaApplierFromProvidedSchema(`
 		type User {
 			name: String

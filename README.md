@@ -61,3 +61,5 @@ Writing data to your defra instance is made simple using the `PostMutation` func
 `result, err := defra.PostMutation[MyResultStruct](ctx, myNode, mutationString)`
 
 This function will execute a GraphQL mutation and return the result unmarshaled into your specified struct type.
+
+For an example on how you can use this query to create complex objects (with relations to other objects), checkout `pkg/defra/complexObjectWriteAndQuery_test.go`.
