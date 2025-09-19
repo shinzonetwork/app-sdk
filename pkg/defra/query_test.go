@@ -294,7 +294,7 @@ func TestQuerySingle(t *testing.T) {
 			}
 		`
 
-		user, err := QuerySingle[TestUser](defraNode, ctx, query)
+		user, err := QuerySingle[TestUser](ctx, defraNode, query)
 		require.NoError(t, err)
 		assert.Equal(t, "Jane Doe", user.Name)
 	})
@@ -308,7 +308,7 @@ func TestQuerySingle(t *testing.T) {
 			}
 		`
 
-		user, err := QuerySingle[TestUser](defraNode, ctx, query)
+		user, err := QuerySingle[TestUser](ctx, defraNode, query)
 		require.NoError(t, err) // No error when no results found, just empty result
 		assert.Empty(t, user.Name)
 	})
@@ -343,7 +343,7 @@ func TestQueryArray(t *testing.T) {
 			}
 		`
 
-		userArray, err := QueryArray[TestUser](defraNode, ctx, query)
+		userArray, err := QueryArray[TestUser](ctx, defraNode, query)
 		require.NoError(t, err)
 		assert.Len(t, userArray, 3) // 3 new users created in this test
 
@@ -366,7 +366,7 @@ func TestQueryArray(t *testing.T) {
 			}
 		`
 
-		userArray, err := QueryArray[TestUser](defraNode, ctx, query)
+		userArray, err := QueryArray[TestUser](ctx, defraNode, query)
 		require.NoError(t, err)
 		assert.Len(t, userArray, 1)
 		assert.Equal(t, "Alice", userArray[0].Name)

@@ -173,7 +173,7 @@ func (c *queryClient) queryDataInto(ctx context.Context, query string, result in
 
 // QuerySingle executes a GraphQL query and returns a single item of the specified type
 // This is useful when you expect a single object back (not an array)
-func QuerySingle[T any](defraNode *node.Node, ctx context.Context, query string) (T, error) {
+func QuerySingle[T any](ctx context.Context, defraNode *node.Node, query string) (T, error) {
 	var result T
 	client, err := newQueryClient(defraNode)
 	if err != nil {
@@ -185,7 +185,7 @@ func QuerySingle[T any](defraNode *node.Node, ctx context.Context, query string)
 
 // QueryArray executes a GraphQL query and returns an array of the specified type
 // This is useful when you expect an array of objects back
-func QueryArray[T any](defraNode *node.Node, ctx context.Context, query string) ([]T, error) {
+func QueryArray[T any](ctx context.Context, defraNode *node.Node, query string) ([]T, error) {
 	var result []T
 	client, err := newQueryClient(defraNode)
 	if err != nil {

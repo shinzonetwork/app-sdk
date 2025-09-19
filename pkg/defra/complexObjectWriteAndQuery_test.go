@@ -494,7 +494,7 @@ func TestComplexObjectWriteAndQuery(t *testing.T) {
 			}
 		`
 
-		block, err := QuerySingle[Block](defraNode, ctx, query)
+		block, err := QuerySingle[Block](ctx, defraNode, query)
 		require.NoError(t, err)
 
 		t.Logf("Block: %+v", block)

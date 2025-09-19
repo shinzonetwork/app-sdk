@@ -50,9 +50,9 @@ Querying your defra instance is made much simpler using the query functions in t
 
 Query with either `QuerySingle` or `QueryArray` for individual objects or arrays. You'll need to provide a graphql query string and you'll need to define a struct representing the resulting object you hope to receive.
 
-`result, err := defra.QuerySingle[MyResultStruct](myNode, ctx, queryString)`
+`result, err := defra.QuerySingle[MyResultStruct](ctx, myNode, queryString)`
 or
-`results, err := defra.QueryArray[MyResultStruct](myNode, ctx, queryString)`
+`results, err := defra.QueryArray[MyResultStruct](ctx, myNode, queryString)`
 
 ### Writing data to your defra instance
 

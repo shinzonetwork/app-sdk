@@ -87,7 +87,7 @@ func getUserName(ctx context.Context, readerDefra *node.Node) (string, error) {
 			name
 		}
 	}`
-	user, err := defra.QuerySingle[UserWithVersion](readerDefra, ctx, query)
+	user, err := defra.QuerySingle[UserWithVersion](ctx, readerDefra, query)
 	if err != nil {
 		return "", fmt.Errorf("Error querying user: %v", err)
 	}
@@ -497,7 +497,7 @@ func getUserWithVersion(ctx context.Context, defraNode *node.Node) (UserWithVers
 		}
 	}`
 
-	user, err := defra.QuerySingle[UserWithVersion](defraNode, ctx, query)
+	user, err := defra.QuerySingle[UserWithVersion](ctx, defraNode, query)
 	if err != nil {
 		return UserWithVersion{}, fmt.Errorf("Error querying user with version: %v", err)
 	}
