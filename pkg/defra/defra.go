@@ -89,8 +89,12 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier) (*node.
 
 	err = schemaApplier.ApplySchema(ctx, defraNode)
 	if err != nil {
-		defer defraNode.Close(ctx)
-		return nil, fmt.Errorf("Failed to apply schema: %v", err)
+		if strings.Contains(err.Error(), "collection already exists") {
+			logger.Sugar.Warnf("Failed to apply schema: %v\nProceeding...", err)
+		} else {
+			defer defraNode.Close(ctx)
+			return nil, fmt.Errorf("Failed to apply schema: %v", err)
+		}
 	}
 
 	return defraNode, nil
