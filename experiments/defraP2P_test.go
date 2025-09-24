@@ -325,11 +325,12 @@ func assertDefraInstanceDoesNotHaveData(t *testing.T, ctx context.Context, reade
 // This test mirrors the setup of TestMultiTenantP2PReplication_ConnectToBigPeer
 // Except, in this test, our "big peer" doesn't subscribe to any collections
 // With the "big peer" not subscribed to the "User" collection, data is not passively replicated to it
-// We also see that the data does not "hop" past the "big peer" and form a connection from the writer to the readers
-// The readers do not receive the data they are looking for
+// We see that the data is able to "hop" past the "big peer" and make it to our reader nodes
 func TestMultiTenantP2PReplication_ConnectToBigPeerWhoDoesNotDeclareInterestInTopics(t *testing.T) {
-	listenAddress := "/ip4/127.0.0.1/tcp/0"
-	defraUrl := "127.0.0.1:0"
+	ipAddress, err := getLANIP() // Must use external address like IP address instead of loop back address for this to work - otherwise we will not hop past our big peer
+	require.NoError(t, err)
+	listenAddress := fmt.Sprintf("/ip4/%s/tcp/0", ipAddress)
+	defraUrl := fmt.Sprintf("%s:0", ipAddress)
 	ctx := context.Background()
 
 	bigPeer := createWriterDefraInstanceAndApplySchema(t, ctx, defraUrl, listenAddress)
@@ -345,14 +346,14 @@ func TestMultiTenantP2PReplication_ConnectToBigPeerWhoDoesNotDeclareInterestInTo
 	}
 	writerDefra := createDefraInstanceAndApplySchema(t, ctx, options)
 	defer writerDefra.Close(ctx)
-	err := writerDefra.DB.AddP2PCollections(ctx, "User")
+	err = writerDefra.DB.AddP2PCollections(ctx, "User")
 	require.NoError(t, err)
 
 	err = writerDefra.DB.Connect(ctx, bigPeer.DB.PeerInfo())
 	require.NoError(t, err)
 
 	readerDefraInstances := []*node.Node{}
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 5; i++ { // In my testing, with the current configuration, there does seem to be a cap of concurrent P2P connections I can get on this system - it consistently fails when trying to connect the 8th reader node to the big peer
 		readerDefraOptions := []node.Option{
 			node.WithDisableAPI(false),
 			node.WithDisableP2P(false),
@@ -366,7 +367,7 @@ func TestMultiTenantP2PReplication_ConnectToBigPeerWhoDoesNotDeclareInterestInTo
 		assertDefraInstanceDoesNotHaveData(t, ctx, newDefraInstance)
 
 		err = newDefraInstance.DB.Connect(ctx, bigPeer.DB.PeerInfo())
-		require.NoError(t, err)
+		require.NoError(t, err, fmt.Sprintf("Unexpected error connecting reader node instance %d to big peer: %v", (i+1), err))
 
 		addSchema(t, ctx, newDefraInstance)
 
@@ -384,12 +385,7 @@ func TestMultiTenantP2PReplication_ConnectToBigPeerWhoDoesNotDeclareInterestInTo
 	require.NoError(t, err)
 	require.Equal(t, "Quinn", result)
 
-	for i := 0; i < 60; i++ {
-		time.Sleep(1 * time.Second)
-		for _, reader := range readerDefraInstances {
-			assertDefraInstanceDoesNotHaveData(t, ctx, reader) // In general, it may take some time for data to passively replicate so we give it a chance to - however, it won't in this test due to the setup
-		}
-	}
+	assertReaderDefraInstancesHaveLatestData(t, ctx, readerDefraInstances)
 }
 
 // This test has multiple defra nodes writing the same data to be read by another node
