@@ -101,7 +101,8 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier) (*node.
 }
 
 // A simple wrapper on StartDefraInstance that changes the configured defra store path to a temp directory for the test
-func StartDefraInstanceWithTempStoreForTest(t *testing.T, cfg *config.Config, schemaApplier SchemaApplier) (*node.Node, error) {
+func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaApplier SchemaApplier) (*node.Node, error) {
 	cfg.DefraDB.Store.Path = t.TempDir()
+	cfg.DefraDB.Url = "127.0.0.1:0"
 	return StartDefraInstance(cfg, schemaApplier)
 }
