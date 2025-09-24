@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/shinzonetwork/app-sdk/pkg/file"
-	"github.com/shinzonetwork/app-sdk/pkg/logger"
 	"github.com/sourcenetwork/defradb/node"
 )
 
@@ -27,8 +26,6 @@ type SchemaApplierFromFile struct {
 }
 
 func (schema *SchemaApplierFromFile) ApplySchema(ctx context.Context, defraNode *node.Node) error {
-	logger.Sugar.Debug("Applying schema...")
-
 	if len(schema.DefaultPath) == 0 {
 		schema.DefaultPath = defaultPath
 	}
@@ -58,8 +55,6 @@ func NewSchemaApplierFromProvidedSchema(schema string) *SchemaApplierFromProvide
 }
 
 func (schema *SchemaApplierFromProvidedSchema) ApplySchema(ctx context.Context, defraNode *node.Node) error {
-	logger.Sugar.Debug("Applying schema...")
-
 	_, err := defraNode.DB.AddSchema(ctx, string(schema.ProvidedSchema))
 	return err
 }
