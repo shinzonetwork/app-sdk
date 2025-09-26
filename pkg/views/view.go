@@ -5,18 +5,14 @@ import (
 	"fmt"
 
 	"github.com/shinzonetwork/app-sdk/pkg/defra"
+	"github.com/shinzonetwork/view-creator/core/models"
 	"github.com/sourcenetwork/defradb/node"
 )
 
-type View struct {
-	Query  string   `json:"query"`
-	Sdl    string   `json:"sdl"`
-	Lenses []string `json:"transform.lenses"`
-	Name   string
-}
+type View models.View
 
 func (view *View) SubscribeTo(ctx context.Context, defraNode *node.Node) error {
-	schemaApplier := defra.NewSchemaApplierFromProvidedSchema(view.Sdl)
+	schemaApplier := defra.NewSchemaApplierFromProvidedSchema(*view.Sdl)
 	err := schemaApplier.ApplySchema(ctx, defraNode)
 	if err != nil {
 		return fmt.Errorf("Error applying view's schema: %v", err)
