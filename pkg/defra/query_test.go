@@ -372,3 +372,106 @@ func TestQueryArray(t *testing.T) {
 		assert.Equal(t, "Alice", userArray[0].Name)
 	})
 }
+
+func TestQueryAutoWrapping(t *testing.T) {
+	defraNode, _ := setupTestQueryClient(t)
+	defer defraNode.Close(context.Background())
+
+	ctx := context.Background()
+
+	// Create some test data
+	createUserMutation := `
+		mutation {
+			create_User(input: {name: "TestUser"}) {
+				_docID
+				name
+			}
+		}
+	`
+	_, err := QuerySingle[map[string]interface{}](ctx, defraNode, createUserMutation)
+	require.NoError(t, err)
+
+	t.Run("QuerySingle with unwrapped query", func(t *testing.T) {
+		// Query without "query" wrapper should be automatically wrapped
+		unwrappedQuery := `User(limit: 1) { name }`
+
+		user, err := QuerySingle[TestUser](ctx, defraNode, unwrappedQuery)
+		require.NoError(t, err)
+		assert.Equal(t, "TestUser", user.Name)
+	})
+
+	t.Run("QuerySingle with already wrapped query", func(t *testing.T) {
+		// Query that already has "query" wrapper should remain unchanged
+		wrappedQuery := `query { User(limit: 1) { name } }`
+
+		user, err := QuerySingle[TestUser](ctx, defraNode, wrappedQuery)
+		require.NoError(t, err)
+		assert.Equal(t, "TestUser", user.Name)
+	})
+
+	t.Run("QueryArray with unwrapped query", func(t *testing.T) {
+		// Query without "query" wrapper should be automatically wrapped
+		unwrappedQuery := `User { name }`
+
+		users, err := QueryArray[TestUser](ctx, defraNode, unwrappedQuery)
+		require.NoError(t, err)
+		assert.Len(t, users, 1)
+		assert.Equal(t, "TestUser", users[0].Name)
+	})
+
+	t.Run("QueryArray with already wrapped query", func(t *testing.T) {
+		// Query that already has "query" wrapper should remain unchanged
+		wrappedQuery := `query { User { name } }`
+
+		users, err := QueryArray[TestUser](ctx, defraNode, wrappedQuery)
+		require.NoError(t, err)
+		assert.Len(t, users, 1)
+		assert.Equal(t, "TestUser", users[0].Name)
+	})
+
+	t.Run("Query with case insensitive query detection", func(t *testing.T) {
+		// Query with "query" (lowercase) should be detected as already wrapped
+		lowercaseQuery := `query { User(limit: 1) { name } }`
+
+		user, err := QuerySingle[TestUser](ctx, defraNode, lowercaseQuery)
+		require.NoError(t, err)
+		assert.Equal(t, "TestUser", user.Name)
+	})
+
+	t.Run("Query with whitespace before query keyword", func(t *testing.T) {
+		// Query with whitespace before "query" should be detected as already wrapped
+		whitespaceQuery := `   query { User(limit: 1) { name } }`
+
+		user, err := QuerySingle[TestUser](ctx, defraNode, whitespaceQuery)
+		require.NoError(t, err)
+		assert.Equal(t, "TestUser", user.Name)
+	})
+
+	t.Run("Query with whitespace before unwrapped query", func(t *testing.T) {
+		// Query with whitespace but no "query" keyword should be wrapped
+		whitespaceUnwrappedQuery := `   User(limit: 1) { name }`
+
+		user, err := QuerySingle[TestUser](ctx, defraNode, whitespaceUnwrappedQuery)
+		require.NoError(t, err)
+		assert.Equal(t, "TestUser", user.Name)
+	})
+
+	t.Run("Mutation should not be auto-wrapped", func(t *testing.T) {
+		// Mutation should not be wrapped with "query"
+		mutationQuery := `mutation { create_User(input: {name: "AnotherUser"}) { _docID name } }`
+
+		result, err := QuerySingle[map[string]interface{}](ctx, defraNode, mutationQuery)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+
+	t.Run("Subscription should not be auto-wrapped", func(t *testing.T) {
+		// Subscription should not be wrapped with "query" (even though we can't test execution)
+		subscriptionQuery := `subscription { User { name } }`
+
+		// We can't actually test subscription execution, but we can test that it's not wrapped
+		// by checking the wrapQueryIfNeeded function directly
+		wrapped := wrapQueryIfNeeded(subscriptionQuery)
+		assert.Equal(t, subscriptionQuery, wrapped, "Subscription should not be wrapped")
+	})
+}

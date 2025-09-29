@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/sourcenetwork/defradb/node"
 )
@@ -171,6 +172,38 @@ func (c *queryClient) queryDataInto(ctx context.Context, query string, result in
 	return json.Unmarshal(dataBytes, result)
 }
 
+// wrapQueryIfNeeded automatically wraps a query with "query { }" if it doesn't already start with "query", "mutation", or "subscription"
+func wrapQueryIfNeeded(query string) string {
+	// Trim whitespace to check the actual start
+	trimmed := strings.TrimSpace(query)
+
+	// Check if query already starts with GraphQL operation keywords (case insensitive)
+	if len(trimmed) >= 5 {
+		lowerStart := strings.ToLower(trimmed[:5])
+		if lowerStart == "query" || lowerStart == "mutat" || lowerStart == "subsc" {
+			return query // Return original query as-is
+		}
+	}
+
+	// Check for "mutation" and "subscription" (longer keywords)
+	if len(trimmed) >= 8 {
+		lowerStart := strings.ToLower(trimmed[:8])
+		if lowerStart == "mutation" {
+			return query // Return original query as-is
+		}
+	}
+
+	if len(trimmed) >= 11 {
+		lowerStart := strings.ToLower(trimmed[:11])
+		if lowerStart == "subscription" {
+			return query // Return original query as-is
+		}
+	}
+
+	// Wrap the query with "query { }"
+	return fmt.Sprintf("query { %s }", query)
+}
+
 // QuerySingle executes a GraphQL query and returns a single item of the specified type
 // This is useful when you expect a single object back (not an array)
 func QuerySingle[T any](ctx context.Context, defraNode *node.Node, query string) (T, error) {
@@ -179,7 +212,10 @@ func QuerySingle[T any](ctx context.Context, defraNode *node.Node, query string)
 	if err != nil {
 		return result, err
 	}
-	err = client.queryDataInto(ctx, query, &result)
+
+	// Auto-wrap query if it doesn't start with "query"
+	wrappedQuery := wrapQueryIfNeeded(query)
+	err = client.queryDataInto(ctx, wrappedQuery, &result)
 	return result, err
 }
 
@@ -191,6 +227,9 @@ func QueryArray[T any](ctx context.Context, defraNode *node.Node, query string) 
 	if err != nil {
 		return result, err
 	}
-	err = client.queryDataInto(ctx, query, &result)
+
+	// Auto-wrap query if it doesn't start with "query"
+	wrappedQuery := wrapQueryIfNeeded(query)
+	err = client.queryDataInto(ctx, wrappedQuery, &result)
 	return result, err
 }
