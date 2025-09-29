@@ -178,30 +178,31 @@ func wrapQueryIfNeeded(query string) string {
 	trimmed := strings.TrimSpace(query)
 
 	// Check if query already starts with GraphQL operation keywords (case insensitive)
-	if len(trimmed) >= 5 {
-		lowerStart := strings.ToLower(trimmed[:5])
-		if lowerStart == "query" || lowerStart == "mutat" || lowerStart == "subsc" {
-			return query // Return original query as-is
-		}
+	lowerTrimmed := strings.ToLower(trimmed)
+
+	if strings.HasPrefix(lowerTrimmed, "query ") || lowerTrimmed == "query" {
+		return query // Return original query as-is
 	}
 
-	// Check for "mutation" and "subscription" (longer keywords)
-	if len(trimmed) >= 8 {
-		lowerStart := strings.ToLower(trimmed[:8])
-		if lowerStart == "mutation" {
-			return query // Return original query as-is
-		}
+	if strings.HasPrefix(lowerTrimmed, "mutation ") || lowerTrimmed == "mutation" {
+		return query // Return original query as-is
 	}
 
-	if len(trimmed) >= 11 {
-		lowerStart := strings.ToLower(trimmed[:11])
-		if lowerStart == "subscription" {
-			return query // Return original query as-is
-		}
+	if strings.HasPrefix(lowerTrimmed, "subscription ") || lowerTrimmed == "subscription" {
+		return query // Return original query as-is
+	}
+
+	// Check if query is already wrapped in curly braces but doesn't start with a keyword
+	// This handles cases like "{ Block { __typename } }" which should be wrapped as "query { Block { __typename } }"
+	if len(trimmed) >= 2 && trimmed[0] == '{' && trimmed[len(trimmed)-1] == '}' {
+		// Extract the content inside the braces
+		innerContent := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+		// Wrap with "query" keyword
+		return fmt.Sprintf("query { %s }", innerContent)
 	}
 
 	// Wrap the query with "query { }"
-	return fmt.Sprintf("query { %s }", query)
+	return fmt.Sprintf("query { %s }", strings.TrimSpace(query))
 }
 
 // QuerySingle executes a GraphQL query and returns a single item of the specified type

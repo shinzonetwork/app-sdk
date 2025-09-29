@@ -474,4 +474,109 @@ func TestQueryAutoWrapping(t *testing.T) {
 		wrapped := wrapQueryIfNeeded(subscriptionQuery)
 		assert.Equal(t, subscriptionQuery, wrapped, "Subscription should not be wrapped")
 	})
+
+	t.Run("Query wrapped in braces without query keyword", func(t *testing.T) {
+		// Query that's already wrapped in braces but doesn't start with "query"
+		bracedQuery := `{ User(limit: 1) { name } }`
+
+		user, err := QuerySingle[TestUser](ctx, defraNode, bracedQuery)
+		require.NoError(t, err)
+		assert.Equal(t, "TestUser", user.Name)
+	})
+
+	t.Run("Query wrapped in braces with whitespace", func(t *testing.T) {
+		// Query with whitespace around braces
+		bracedQuery := `  { User(limit: 1) { name } }  `
+
+		user, err := QuerySingle[TestUser](ctx, defraNode, bracedQuery)
+		require.NoError(t, err)
+		assert.Equal(t, "TestUser", user.Name)
+	})
+
+	t.Run("QueryArray with braced query", func(t *testing.T) {
+		// Array query wrapped in braces - use limit to get only one result
+		bracedQuery := `{ User(limit: 1) { name } }`
+
+		users, err := QueryArray[TestUser](ctx, defraNode, bracedQuery)
+		require.NoError(t, err)
+		assert.Len(t, users, 1)
+		// The name could be any of the users created in previous tests
+		assert.NotEmpty(t, users[0].Name)
+	})
+}
+
+func TestWrapQueryIfNeeded(t *testing.T) {
+	t.Run("query with query keyword", func(t *testing.T) {
+		query := `query { User { name } }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, query, result)
+	})
+
+	t.Run("mutation with mutation keyword", func(t *testing.T) {
+		query := `mutation { create_User(input: {name: "Test"}) { name } }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, query, result)
+	})
+
+	t.Run("subscription with subscription keyword", func(t *testing.T) {
+		query := `subscription { User { name } }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, query, result)
+	})
+
+	t.Run("query wrapped in braces without keyword", func(t *testing.T) {
+		query := `{ User { name } }`
+		expected := `query { User { name } }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("query wrapped in braces with whitespace", func(t *testing.T) {
+		query := `  { User { name } }  `
+		expected := `query { User { name } }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("query wrapped in braces with inner whitespace", func(t *testing.T) {
+		query := `{  User  {  name  }  }`
+		expected := `query { User  {  name  } }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("simple query without braces", func(t *testing.T) {
+		query := `User { name }`
+		expected := `query { User { name } }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("query with whitespace", func(t *testing.T) {
+		query := `  User { name }  `
+		expected := `query { User { name } }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("empty query", func(t *testing.T) {
+		query := ``
+		expected := `query {  }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("whitespace only query", func(t *testing.T) {
+		query := `   `
+		expected := `query {  }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("single character query", func(t *testing.T) {
+		query := `a`
+		expected := `query { a }`
+		result := wrapQueryIfNeeded(query)
+		assert.Equal(t, expected, result)
+	})
 }
