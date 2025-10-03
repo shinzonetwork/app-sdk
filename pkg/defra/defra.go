@@ -36,7 +36,7 @@ var DefaultConfig *config.Config = &config.Config{
 var requiredPeers []string = []string{} // Here, we can add some "big peers" to give nodes a starting place when building their peer network
 const defaultListenAddress string = "/ip4/127.0.0.1/tcp/9171"
 
-func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier) (*node.Node, error) {
+func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collectionsOfInterest ...string) (*node.Node, error) {
 	ctx := context.Background()
 
 	if cfg == nil {
@@ -95,6 +95,11 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier) (*node.
 			defer defraNode.Close(ctx)
 			return nil, fmt.Errorf("Failed to apply schema: %v", err)
 		}
+	}
+
+	err = defraNode.DB.AddP2PCollections(ctx, collectionsOfInterest...)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to add collections of interes %v: %w", collectionsOfInterest, err)
 	}
 
 	return defraNode, nil
