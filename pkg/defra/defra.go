@@ -9,6 +9,7 @@ import (
 
 	"github.com/shinzonetwork/app-sdk/pkg/config"
 	"github.com/shinzonetwork/app-sdk/pkg/logger"
+	"github.com/shinzonetwork/app-sdk/pkg/networking"
 	"github.com/sourcenetwork/defradb/acp/identity"
 	"github.com/sourcenetwork/defradb/crypto"
 	"github.com/sourcenetwork/defradb/http"
@@ -107,7 +108,14 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 
 // A simple wrapper on StartDefraInstance that changes the configured defra store path to a temp directory for the test
 func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaApplier SchemaApplier) (*node.Node, error) {
+	ipAddress, err := networking.GetLANIP()
+	if err != nil {
+		return nil, err
+	}
+	listenAddress := fmt.Sprintf("/ip4/%s/tcp/0", ipAddress)
+	defraUrl := fmt.Sprintf("%s:0", ipAddress)
 	cfg.DefraDB.Store.Path = t.TempDir()
-	cfg.DefraDB.Url = "127.0.0.1:0"
+	cfg.DefraDB.Url = defraUrl
+	cfg.DefraDB.P2P.ListenAddr = listenAddress
 	return StartDefraInstance(cfg, schemaApplier)
 }
