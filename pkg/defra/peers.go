@@ -16,7 +16,8 @@ func bootstrapIntoPeers(configuredBootstrapPeers []string) ([]client.PeerInfo, [
 	for i, peer := range configuredBootstrapPeers {
 		parts := strings.Split(peer, "/p2p/")
 		if len(parts) != 2 {
-			errors = append(errors, fmt.Errorf("Peer at index %d is invalid and will be skipped. Given: %v", i, configuredBootstrapPeers))
+			errors = append(errors, fmt.Errorf("peer at index %d is invalid and will be skipped. Given: %v", i, configuredBootstrapPeers))
+			continue
 		}
 		address := parts[0]
 		peerID := parts[1]
@@ -31,13 +32,37 @@ func bootstrapIntoPeers(configuredBootstrapPeers []string) ([]client.PeerInfo, [
 	return peers, errors
 }
 
+func PeersIntoBootstrap(peers []client.PeerInfo) ([]string, []error) {
+	bootstrapPeers := []string{}
+	errors := []error{}
+
+	for i, peer := range peers {
+		if peer.ID == "" {
+			errors = append(errors, fmt.Errorf("peer at index %d has empty ID and will be skipped", i))
+			continue
+		}
+
+		if len(peer.Addresses) == 0 {
+			errors = append(errors, fmt.Errorf("peer at index %d has no addresses and will be skipped", i))
+			continue
+		}
+
+		// Use the first address if multiple addresses are provided
+		address := peer.Addresses[0]
+		bootstrapPeer := fmt.Sprintf("%s/p2p/%s", address, peer.ID)
+		bootstrapPeers = append(bootstrapPeers, bootstrapPeer)
+	}
+
+	return bootstrapPeers, errors
+}
+
 func connectToPeers(ctx context.Context, defraNode *node.Node, peers []client.PeerInfo) []error {
 	errors := []error{}
 
 	for i, peer := range peers {
 		err := defraNode.DB.Connect(ctx, peer)
 		if err != nil {
-			errors = append(errors, fmt.Errorf("Error connecting to peer %d with info %v: %v", i, peer, err))
+			errors = append(errors, fmt.Errorf("error connecting to peer %d with info %v: %v", i, peer, err))
 		}
 	}
 
