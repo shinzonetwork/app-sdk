@@ -41,7 +41,7 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 	ctx := context.Background()
 
 	if cfg == nil {
-		return nil, fmt.Errorf("Config cannot be nil")
+		return nil, fmt.Errorf("config cannot be nil")
 	}
 	cfg.DefraDB.P2P.BootstrapPeers = append(cfg.DefraDB.P2P.BootstrapPeers, requiredPeers...)
 
@@ -49,7 +49,27 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 
 	nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1) // Todo: this is an ephemeral identity - this means that each time we start a defra instance via this method, it will have a randomly generated signing key - we'll want to add keyring support
 	if err != nil {
-		return nil, fmt.Errorf("Error generating identity: %v", err)
+		return nil, fmt.Errorf("error generating identity: %v", err)
+	}
+
+	// Get real IP address to replace loopback addresses
+	ipAddress, err := networking.GetLANIP()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LAN IP address: %v", err)
+	}
+
+	// Replace loopback addresses in URL with real IP
+	defraUrl := cfg.DefraDB.Url
+	defraUrl = strings.Replace(defraUrl, "http://localhost", ipAddress, 1)
+	defraUrl = strings.Replace(defraUrl, "http://127.0.0.1", ipAddress, 1)
+	defraUrl = strings.Replace(defraUrl, "localhost", ipAddress, 1)
+	defraUrl = strings.Replace(defraUrl, "127.0.0.1", ipAddress, 1)
+
+	// Replace loopback addresses in listen address with real IP
+	listenAddress := cfg.DefraDB.P2P.ListenAddr
+	if len(listenAddress) > 0 {
+		listenAddress = strings.Replace(listenAddress, "127.0.0.1", ipAddress, 1)
+		listenAddress = strings.Replace(listenAddress, "localhost", ipAddress, 1)
 	}
 
 	// Create defra node
@@ -57,21 +77,20 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 		node.WithDisableAPI(false),
 		node.WithDisableP2P(false),
 		node.WithStorePath(cfg.DefraDB.Store.Path),
-		http.WithAddress(strings.Replace(cfg.DefraDB.Url, "http://localhost", "127.0.0.1", 1)),
+		http.WithAddress(defraUrl),
 		node.WithNodeIdentity(identity.Identity(nodeIdentity)),
 	}
-	listenAddress := cfg.DefraDB.P2P.ListenAddr
 	if len(listenAddress) > 0 {
 		options = append(options, netConfig.WithListenAddresses(listenAddress))
 	}
 	defraNode, err := node.New(ctx, options...)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create defra node: %v ", err)
+		return nil, fmt.Errorf("failed to create defra node: %v ", err)
 	}
 
 	err = defraNode.Start(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to start defra node: %v ", err)
+		return nil, fmt.Errorf("failed to start defra node: %v ", err)
 	}
 
 	// Connect to bootstrap peers
@@ -83,7 +102,7 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 	if len(errors) > 0 {
 		if len(errors) == len(peers) {
 			defer defraNode.Close(ctx)
-			return nil, fmt.Errorf("Failed to connect to any peers, with errors: %v", errors)
+			return nil, fmt.Errorf("failed to connect to any peers, with errors: %v", errors)
 		}
 		logger.Sugar.Errorf("Failed to connect to %d peers, with errors: %v", len(errors), errors)
 	}
@@ -94,13 +113,13 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 			logger.Sugar.Warnf("Failed to apply schema: %v\nProceeding...", err)
 		} else {
 			defer defraNode.Close(ctx)
-			return nil, fmt.Errorf("Failed to apply schema: %v", err)
+			return nil, fmt.Errorf("failed to apply schema: %v", err)
 		}
 	}
 
 	err = defraNode.DB.AddP2PCollections(ctx, collectionsOfInterest...)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to add collections of interes %v: %w", collectionsOfInterest, err)
+		return nil, fmt.Errorf("failed to add collections of interes %v: %w", collectionsOfInterest, err)
 	}
 
 	return defraNode, nil
