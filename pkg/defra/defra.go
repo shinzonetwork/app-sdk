@@ -44,6 +44,9 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 		return nil, fmt.Errorf("config cannot be nil")
 	}
 	cfg.DefraDB.P2P.BootstrapPeers = append(cfg.DefraDB.P2P.BootstrapPeers, requiredPeers...)
+	if len(cfg.DefraDB.P2P.ListenAddr) == 0 {
+		cfg.DefraDB.P2P.ListenAddr = defaultListenAddress
+	}
 
 	logger.Init(cfg.Logger.Development)
 
