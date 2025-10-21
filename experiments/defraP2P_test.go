@@ -98,7 +98,7 @@ func getUserName(ctx context.Context, readerDefra *node.Node) (string, error) {
 }
 
 func addSchema(t *testing.T, ctx context.Context, writerDefra *node.Node) {
-	schema := "type User { name: String }"
+	schema := "type User { name: String, friends: [String] }"
 	_, err := writerDefra.DB.AddSchema(ctx, schema)
 	require.NoError(t, err)
 }
@@ -113,6 +113,30 @@ func postBasicData(t *testing.T, ctx context.Context, writerDefra *node.Node) {
 	result, err := defra.PostMutation[UserWithVersion](ctx, writerDefra, query)
 	require.NoError(t, err)
 	require.Equal(t, "Quinn", result.Name)
+}
+
+func postDataWithFriends(t *testing.T, ctx context.Context, writerDefra *node.Node, friends []string) {
+	// Format the friends array for the GraphQL mutation
+	friendsStr := "["
+	for i, friend := range friends {
+		if i > 0 {
+			friendsStr += ", "
+		}
+		friendsStr += fmt.Sprintf(`"%s"`, friend)
+	}
+	friendsStr += "]"
+
+	query := fmt.Sprintf(`mutation {
+		create_User(input: { name: "Quinn", friends: %s }) {
+			name
+			friends
+		}
+	}`, friendsStr)
+
+	result, err := defra.PostMutation[UserWithFriends](ctx, writerDefra, query)
+	require.NoError(t, err)
+	require.Equal(t, "Quinn", result.Name)
+	t.Logf("Posted user with friends: %v", result.Friends)
 }
 
 // This test shows us what active replication looks like with multiple tenants
@@ -477,6 +501,11 @@ type UserWithVersion struct {
 	Version []attestation.Version `json:"_version"`
 }
 
+type UserWithFriends struct {
+	Name    string   `json:"name"`
+	Friends []string `json:"friends"`
+}
+
 func getUserWithVersion(ctx context.Context, defraNode *node.Node) (UserWithVersion, error) {
 	query := `query GetUserWithVersion{
 		User(limit: 1) {
@@ -499,4 +528,117 @@ func getUserWithVersion(ctx context.Context, defraNode *node.Node) (UserWithVers
 	}
 
 	return user, nil
+}
+
+// This test mimics TestSyncFromMultipleWriters and is also designed to help us explore Defra's built in `_version` attestation system
+// In this test, unlike in TestSyncFromMultipleWriters, we have one of our writers write slightly different data
+// We see that this gives us two separate documents in our collection, each with a version array of their own
+func TestSyncFromMultipleWritersWithSomeOverlappingData(t *testing.T) {
+	listenAddress := "/ip4/127.0.0.1/tcp/0"
+	defraUrl := "127.0.0.1:0"
+	ctx := context.Background()
+
+	writerDefras := []*node.Node{}
+	defraNodes := 10
+	for i := 0; i < defraNodes; i++ {
+		nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1)
+		require.NoError(t, err)
+		options := []node.Option{
+			node.WithDisableAPI(false),
+			node.WithDisableP2P(false),
+			node.WithStorePath(t.TempDir()),
+			http.WithAddress(defraUrl),
+			netConfig.WithListenAddresses(listenAddress),
+			node.WithNodeIdentity(identity.Identity(nodeIdentity)),
+		}
+		writerDefra := StartDefraInstance(t, ctx, options)
+		defer writerDefra.Close(ctx)
+
+		addSchema(t, ctx, writerDefra)
+		err = writerDefra.DB.AddP2PCollections(ctx, "User")
+		require.NoError(t, err)
+
+		writerDefras = append(writerDefras, writerDefra)
+	}
+
+	// Create a reader instance
+	readerOptions := []node.Option{
+		node.WithDisableAPI(false),
+		node.WithDisableP2P(false),
+		node.WithStorePath(t.TempDir()),
+		http.WithAddress(defraUrl),
+		netConfig.WithListenAddresses(listenAddress),
+	}
+	readerDefra := StartDefraInstance(t, ctx, readerOptions)
+	defer readerDefra.Close(ctx)
+
+	for _, writer := range writerDefras {
+		err := readerDefra.DB.Connect(ctx, writer.DB.PeerInfo())
+		require.NoError(t, err)
+	}
+
+	addSchema(t, ctx, readerDefra)
+
+	assertDefraInstanceDoesNotHaveData(t, ctx, readerDefra)
+
+	err := readerDefra.DB.AddP2PCollections(ctx, "User")
+	require.NoError(t, err)
+
+	// Standard friends array for 9 writers
+	standardFriends := []string{"Alice", "Bob", "Charlie", "Diana"}
+
+	// Modified friends array for 1 writer (remove "Bob", add "Eve" and "Frank")
+	modifiedFriends := []string{"Alice", "Charlie", "Diana", "Eve", "Frank"}
+
+	// Write data to each writer
+	for i, writer := range writerDefras {
+		if i == len(writerDefras)-1 {
+			// Last writer posts modified friends array
+			t.Logf("Writer %d posting with MODIFIED friends: %v", i+1, modifiedFriends)
+			postDataWithFriends(t, ctx, writer, modifiedFriends)
+		} else {
+			// First 9 writers post standard friends array
+			t.Logf("Writer %d posting with STANDARD friends: %v", i+1, standardFriends)
+			postDataWithFriends(t, ctx, writer, standardFriends)
+		}
+	}
+
+	// Wait for sync
+	time.Sleep(5 * time.Second)
+
+	// Query all User entries to see how DefraDB handles the conflicting data
+	query := `query GetAllUsers {
+		User {
+			name
+			friends
+			_version {
+				cid
+				signature {
+					identity
+				}
+			}
+		}
+	}`
+
+	type UserWithFriendsAndVersion struct {
+		Name    string                `json:"name"`
+		Friends []string              `json:"friends"`
+		Version []attestation.Version `json:"_version"`
+	}
+
+	users, err := defra.QueryArray[UserWithFriendsAndVersion](ctx, readerDefra, query)
+	if err != nil {
+		t.Fatalf("Error querying users: %v", err)
+	}
+	require.NotNil(t, users)
+	require.Len(t, users, 2)
+	for _, user := range users {
+		if len(user.Friends) == 4 {
+			require.Len(t, user.Version, defraNodes-1)
+		} else if len(user.Friends) == 5 {
+			require.Len(t, user.Version, 1)
+		} else {
+			t.Fatalf("Unexpected user object %+v", user)
+		}
+	}
 }
