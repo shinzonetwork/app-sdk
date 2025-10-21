@@ -98,7 +98,7 @@ func getUserName(ctx context.Context, readerDefra *node.Node) (string, error) {
 }
 
 func addSchema(t *testing.T, ctx context.Context, writerDefra *node.Node) {
-	schema := "type User { name: String, friends: [String] }"
+	schema := "type User { name: String, friends: [String], vote_count: Int @crdt(type: pcounter) }"
 	_, err := writerDefra.DB.AddSchema(ctx, schema)
 	require.NoError(t, err)
 }
@@ -126,17 +126,83 @@ func postDataWithFriends(t *testing.T, ctx context.Context, writerDefra *node.No
 	}
 	friendsStr += "]"
 
-	query := fmt.Sprintf(`mutation {
-		create_User(input: { name: "Quinn", friends: %s }) {
+	// Try to create the user first
+	createQuery := fmt.Sprintf(`mutation {
+		create_User(input: { name: "Quinn", friends: %s, vote_count: 1 }) {
 			name
 			friends
+			vote_count
 		}
 	}`, friendsStr)
 
-	result, err := defra.PostMutation[UserWithFriends](ctx, writerDefra, query)
-	require.NoError(t, err)
+	result, err := defra.PostMutation[UserWithFriendsAndVoteCount](ctx, writerDefra, createQuery)
+	if err != nil {
+		// If creation fails (document already exists), query for the document ID and update it
+		t.Logf("Create failed (likely doc exists), attempting to update instead: %v", err)
+
+		// Query to get the document - filter by name only since array equality filtering isn't straightforward
+		queryStr := `query {
+			User(filter: {name: {_eq: "Quinn"}}) {
+				_docID
+				vote_count
+				friends
+			}
+		}`
+
+		type UserWithDocID struct {
+			DocID     string   `json:"_docID"`
+			VoteCount int      `json:"vote_count"`
+			Friends   []string `json:"friends"`
+		}
+
+		users, err := defra.QueryArray[UserWithDocID](ctx, writerDefra, queryStr)
+		require.NoError(t, err)
+		require.NotEmpty(t, users, "Should find existing user to update")
+
+		// Find the user with matching friends array
+		var matchingUser *UserWithDocID
+		for i := range users {
+			if len(users[i].Friends) == len(friends) {
+				allMatch := true
+				for j, friend := range friends {
+					if j >= len(users[i].Friends) || users[i].Friends[j] != friend {
+						allMatch = false
+						break
+					}
+				}
+				if allMatch {
+					matchingUser = &users[i]
+					break
+				}
+			}
+		}
+
+		if matchingUser == nil {
+			// If no matching document found, it means this is actually a new variant, so fail
+			t.Fatalf("Expected to find existing user with friends %v but didn't", friends)
+		}
+
+		docID := matchingUser.DocID
+
+		// For CRDT counters, we increment by the delta (1), not set to a cumulative value
+		// Otherwise we get exponential growth since each "set" is treated as an increment
+		incrementBy := 1
+
+		// Update the existing document
+		updateQuery := fmt.Sprintf(`mutation {
+			update_User(docID: "%s", input: { vote_count: %d }) {
+				name
+				friends
+				vote_count
+			}
+		}`, docID, incrementBy)
+
+		result, err = defra.PostMutation[UserWithFriendsAndVoteCount](ctx, writerDefra, updateQuery)
+		require.NoError(t, err)
+	}
+
 	require.Equal(t, "Quinn", result.Name)
-	t.Logf("Posted user with friends: %v", result.Friends)
+	t.Logf("Posted/Updated user with friends: %v, vote_count: %d", result.Friends, result.VoteCount)
 }
 
 // This test shows us what active replication looks like with multiple tenants
@@ -506,6 +572,12 @@ type UserWithFriends struct {
 	Friends []string `json:"friends"`
 }
 
+type UserWithFriendsAndVoteCount struct {
+	Name      string   `json:"name"`
+	Friends   []string `json:"friends"`
+	VoteCount int      `json:"vote_count"`
+}
+
 func getUserWithVersion(ctx context.Context, defraNode *node.Node) (UserWithVersion, error) {
 	query := `query GetUserWithVersion{
 		User(limit: 1) {
@@ -637,6 +709,127 @@ func TestSyncFromMultipleWritersWithSomeOverlappingData(t *testing.T) {
 			require.Len(t, user.Version, defraNodes-1)
 		} else if len(user.Friends) == 5 {
 			require.Len(t, user.Version, 1)
+		} else {
+			t.Fatalf("Unexpected user object %+v", user)
+		}
+	}
+}
+
+// This test mimics TestSyncFromMultipleWritersWithSomeOverlappingData but adds in a vote_count [GCounter CRDT](https://github.com/sourcenetwork/defradb/tree/develop/internal/core/crdt#gcounter---increment-only-counter)
+// Here we see that a malicious actor is able to manipulate the vote_count and increment it multiple times by themselves - giving the allusion of multiple attestations - by modifying the document in subsequent mutation queries
+// We also notice that the compromised document (written by the malicious node) has the same number of `_version` instances as it was written to - giving us an avenue for detecting this, by checking the signing identities
+// Simply checking the _version length is insufficient as an attestation system. We must also check the number of unique signers.
+func TestSyncFromMultipleWritersWithSomeOverlappingDataAndVoteCounts(t *testing.T) {
+	listenAddress := "/ip4/127.0.0.1/tcp/0"
+	defraUrl := "127.0.0.1:0"
+	ctx := context.Background()
+
+	writerDefras := []*node.Node{}
+	defraNodes := 10
+	for i := 0; i < defraNodes; i++ {
+		nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1)
+		require.NoError(t, err)
+		options := []node.Option{
+			node.WithDisableAPI(false),
+			node.WithDisableP2P(false),
+			node.WithStorePath(t.TempDir()),
+			http.WithAddress(defraUrl),
+			netConfig.WithListenAddresses(listenAddress),
+			node.WithNodeIdentity(identity.Identity(nodeIdentity)),
+		}
+		writerDefra := StartDefraInstance(t, ctx, options)
+		defer writerDefra.Close(ctx)
+
+		addSchema(t, ctx, writerDefra)
+		err = writerDefra.DB.AddP2PCollections(ctx, "User")
+		require.NoError(t, err)
+
+		writerDefras = append(writerDefras, writerDefra)
+	}
+
+	// Create a reader instance
+	readerOptions := []node.Option{
+		node.WithDisableAPI(false),
+		node.WithDisableP2P(false),
+		node.WithStorePath(t.TempDir()),
+		http.WithAddress(defraUrl),
+		netConfig.WithListenAddresses(listenAddress),
+	}
+	readerDefra := StartDefraInstance(t, ctx, readerOptions)
+	defer readerDefra.Close(ctx)
+
+	for _, writer := range writerDefras {
+		err := readerDefra.DB.Connect(ctx, writer.DB.PeerInfo())
+		require.NoError(t, err)
+	}
+
+	addSchema(t, ctx, readerDefra)
+
+	assertDefraInstanceDoesNotHaveData(t, ctx, readerDefra)
+
+	err := readerDefra.DB.AddP2PCollections(ctx, "User")
+	require.NoError(t, err)
+
+	// Standard friends array for 9 writers
+	standardFriends := []string{"Alice", "Bob", "Charlie", "Diana"}
+
+	// Modified friends array for 1 writer (remove "Bob", add "Eve" and "Frank")
+	modifiedFriends := []string{"Alice", "Charlie", "Diana", "Eve", "Frank"}
+
+	// Write data to each writer
+	for i, writer := range writerDefras {
+		if i == len(writerDefras)-1 {
+			// Last writer posts modified friends array 10 times (malicious behavior)
+			t.Logf("Writer %d (MALICIOUS) posting with MODIFIED friends 10 times: %v", i+1, modifiedFriends)
+			for j := 0; j < 10; j++ {
+				postDataWithFriends(t, ctx, writer, modifiedFriends)
+				t.Logf("  Malicious writer post #%d complete", j+1)
+			}
+		} else {
+			// First 9 writers post standard friends array once
+			t.Logf("Writer %d posting with STANDARD friends: %v", i+1, standardFriends)
+			postDataWithFriends(t, ctx, writer, standardFriends)
+		}
+	}
+
+	// Wait for sync
+	time.Sleep(5 * time.Second)
+
+	// Query all User entries to see how DefraDB handles the conflicting data and CRDT counters
+	query := `query GetAllUsers {
+		User {
+			name
+			friends
+			vote_count
+			_version {
+				cid
+				signature {
+					identity
+				}
+			}
+		}
+	}`
+
+	type UserWithFriendsVoteCountAndVersion struct {
+		Name      string                `json:"name"`
+		Friends   []string              `json:"friends"`
+		VoteCount int                   `json:"vote_count"`
+		Version   []attestation.Version `json:"_version"`
+	}
+
+	users, err := defra.QueryArray[UserWithFriendsVoteCountAndVersion](ctx, readerDefra, query)
+	if err != nil {
+		t.Fatalf("Error querying users: %v", err)
+	}
+	require.NotNil(t, users)
+	require.Len(t, users, 2)
+	for _, user := range users {
+		if len(user.Friends) == 4 {
+			require.Len(t, user.Version, defraNodes-1)
+			require.Equal(t, 9, user.VoteCount)
+		} else if len(user.Friends) == 5 {
+			require.Len(t, user.Version, 10)
+			require.Equal(t, 10, user.VoteCount)
 		} else {
 			t.Fatalf("Unexpected user object %+v", user)
 		}
