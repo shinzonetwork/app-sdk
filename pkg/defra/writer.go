@@ -20,6 +20,14 @@ func PostMutation[T any](ctx context.Context, defraNode *node.Node, query string
 		return nil, fmt.Errorf("Encountered errors posting mutation: %v", gqlResult.Errors)
 	}
 
+	if len(gqlResult.Errors) > 0 {
+		err := fmt.Errorf("Error posting mutation %s", query)
+		for _, gqlError := range gqlResult.Errors {
+			err = fmt.Errorf("%w: %w", err, gqlError)
+		}
+		return nil, err
+	}
+
 	// The GraphQL response data is a map[string]interface{} containing the mutation result
 	// We need to find the first array in the data and extract the first element
 	data, ok := gqlResult.Data.(map[string]interface{})

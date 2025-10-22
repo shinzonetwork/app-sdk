@@ -129,15 +129,18 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 }
 
 // A simple wrapper on StartDefraInstance that changes the configured defra store path to a temp directory for the test
-func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaApplier SchemaApplier) (*node.Node, error) {
+func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaApplier SchemaApplier, collectionsOfInterest ...string) (*node.Node, error) {
 	ipAddress, err := networking.GetLANIP()
 	if err != nil {
 		return nil, err
 	}
 	listenAddress := fmt.Sprintf("/ip4/%s/tcp/0", ipAddress)
 	defraUrl := fmt.Sprintf("%s:0", ipAddress)
+	if cfg == nil {
+		cfg = DefaultConfig
+	}
 	cfg.DefraDB.Store.Path = t.TempDir()
 	cfg.DefraDB.Url = defraUrl
 	cfg.DefraDB.P2P.ListenAddr = listenAddress
-	return StartDefraInstance(cfg, schemaApplier)
+	return StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
 }
