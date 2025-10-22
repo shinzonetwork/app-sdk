@@ -376,7 +376,6 @@ func TestSyncFromMultipleWritersWithSomeOverlappingDataAndVoteCounts(t *testing.
 		VoteCount int                   `json:"vote_count"`
 		Version   []attestation.Version `json:"_version"`
 	}
-
 	users, err := defra.QueryArray[UserWithFriendsVoteCountAndVersion](ctx, readerDefra, query)
 	require.NoError(t, err)
 	require.NotNil(t, users)
@@ -393,4 +392,170 @@ func TestSyncFromMultipleWritersWithSomeOverlappingDataAndVoteCounts(t *testing.
 			t.Fatalf("Unexpected user object %+v", user)
 		}
 	}
+}
+
+// In this test, we see that a (potentially) malicious Defra node is able to overwrite a document
+// And, most concerningly, in doing so, they append to the _version array
+// This test illustrates how a malicious node could overwrite a document and, optionally, add additional "attestations" to it by sending "empty" mutations by sending immaterial data (or none at all) with the intention on signing and creating a new _version entry
+// This exposes a potential attack vector where a malicious actor can not only create malicious resources that look legit (by adding artificial "attestations"), but they can also maliciously modify existing resources and carry the legitimate attestations forward
+func TestSyncFromMultipleWritersWithOneMaliciouslyOverwritingData(t *testing.T) {
+	ctx := context.Background()
+	cfg := defra.DefaultConfig
+	schema := "type User { name: String, friends: [String] }"
+
+	writerDefras := []*node.Node{}
+	defraNodes := 5
+	for i := 0; i < defraNodes; i++ {
+		writerDefra, err := defra.StartDefraInstanceWithTestConfig(t, cfg, defra.NewSchemaApplierFromProvidedSchema(schema))
+		require.NoError(t, err)
+		defer writerDefra.Close(ctx)
+
+		err = writerDefra.DB.AddP2PCollections(ctx, "User")
+		require.NoError(t, err)
+
+		writerDefras = append(writerDefras, writerDefra)
+	}
+
+	// Create a reader instance
+	readerDefra, err := defra.StartDefraInstanceWithTestConfig(t, cfg, defra.NewSchemaApplierFromProvidedSchema(schema))
+	require.NoError(t, err)
+	defer readerDefra.Close(ctx)
+
+	err = readerDefra.DB.AddP2PCollections(ctx, "User")
+	require.NoError(t, err)
+
+	// Connect reader to all writers
+	for _, writer := range writerDefras {
+		err := readerDefra.DB.Connect(ctx, writer.DB.PeerInfo())
+		require.NoError(t, err)
+	}
+
+	// Standard friends array for legitimate writers
+	standardFriends := []string{"Alice", "Bob", "Charlie", "Diana"}
+	// Modified friends array that malicious writer will use
+	maliciousFriendsList := []string{"Alice", "Charlie", "Diana", "Eve", "Frank"}
+
+	type UserResult struct {
+		Name    string   `json:"name"`
+		Friends []string `json:"friends"`
+	}
+
+	// First 4 writers create the document with standard friends
+	for i := 0; i < defraNodes-1; i++ {
+		writer := writerDefras[i]
+		friendsStr := "["
+		for j, friend := range standardFriends {
+			if j > 0 {
+				friendsStr += ", "
+			}
+			friendsStr += fmt.Sprintf(`"%s"`, friend)
+		}
+		friendsStr += "]"
+
+		createMutation := fmt.Sprintf(`mutation {
+			create_User(input: { name: "Quinn", friends: %s }) {
+				name
+				friends
+			}
+		}`, friendsStr)
+
+		_, err := defra.PostMutation[UserResult](ctx, writer, createMutation)
+		require.NoError(t, err)
+	}
+
+	// Wait a bit for P2P sync
+	time.Sleep(2 * time.Second)
+
+	// Now the malicious writer (last one) hijacks the document
+	maliciousWriter := writerDefras[defraNodes-1]
+
+	// Query for the existing document
+	queryStr := `query {
+		User(filter: {name: {_eq: "Quinn"}}) {
+			_docID
+			friends
+		}
+	}`
+
+	type UserWithDocID struct {
+		DocID   string   `json:"_docID"`
+		Friends []string `json:"friends"`
+	}
+
+	var existingDoc UserWithDocID
+	// Keep trying until we find the synced document
+	for attempts := 0; attempts < 30; attempts++ {
+		users, err := defra.QueryArray[UserWithDocID](ctx, maliciousWriter, queryStr)
+		if err == nil && len(users) > 0 {
+			existingDoc = users[0]
+			t.Logf("Malicious writer found existing document with docID: %s, friends: %v", existingDoc.DocID, existingDoc.Friends)
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	require.NotEmpty(t, existingDoc.DocID, "Malicious writer should have synced the document")
+
+	// Malicious writer overwrites the document with modified friends
+	modifiedFriendsStr := "["
+	for j, friend := range maliciousFriendsList {
+		if j > 0 {
+			modifiedFriendsStr += ", "
+		}
+		modifiedFriendsStr += fmt.Sprintf(`"%s"`, friend)
+	}
+	modifiedFriendsStr += "]"
+
+	overwriteMutation := fmt.Sprintf(`mutation {
+		update_User(docID: "%s", input: { friends: %s }) {
+			name
+			friends
+		}
+	}`, existingDoc.DocID, modifiedFriendsStr)
+
+	_, err = defra.PostMutation[UserResult](ctx, maliciousWriter, overwriteMutation)
+	require.NoError(t, err)
+
+	// Now post 9 more "empty" updates to inflate the signature count
+	// We'll just increment vote_count by 1 each time to ensure there's a change
+	for i := 0; i < 9; i++ {
+		updateMutation := fmt.Sprintf(`mutation {
+			update_User(docID: "%s", input: { }) {
+				name
+				friends
+			}
+		}`, existingDoc.DocID)
+
+		_, err := defra.PostMutation[UserResult](ctx, maliciousWriter, updateMutation)
+		require.NoError(t, err)
+	}
+
+	// Wait for sync
+	time.Sleep(5 * time.Second)
+
+	// Query all User entries to see what happened
+	query := `query {
+		User {
+			name
+			friends
+			_version {
+				cid
+				signature {
+					identity
+				}
+			}
+		}
+	}`
+
+	type UserWithFriendsVoteCountAndVersion struct {
+		Name    string                `json:"name"`
+		Friends []string              `json:"friends"`
+		Version []attestation.Version `json:"_version"`
+	}
+
+	users, err := defra.QueryArray[UserWithFriendsVoteCountAndVersion](ctx, readerDefra, query)
+	require.NoError(t, err)
+	require.NotNil(t, users)
+	require.Len(t, users, 1)
+	require.ElementsMatch(t, maliciousFriendsList, users[0].Friends)
+	require.Len(t, users[0].Version, 14)
 }
