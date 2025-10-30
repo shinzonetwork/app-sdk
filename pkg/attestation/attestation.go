@@ -3,6 +3,7 @@ package attestation
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/shinzonetwork/app-sdk/pkg/defra"
 	"github.com/sourcenetwork/defradb/node"
@@ -27,7 +28,6 @@ type IndexerSignature_%s {
 }
 
 type AttestationRecord struct {
-	DocId         string      `json:"_docID"`
 	AttestedDocId string      `json:"attested_doc"`
 	SourceDocId   string      `json:"source_doc"`
 	Signatures    []Signature `json:"signatures"`
@@ -53,4 +53,33 @@ func AddAttestationRecordCollection(ctx context.Context, defraNode *node.Node, a
 		return fmt.Errorf("Error subscribing to collection %s: %v", indexerSignatures, err)
 	}
 	return nil
+}
+
+func GetAttestationRecords(ctx context.Context, defraNode *node.Node, associatedViewName string, viewDocIds []string) ([]AttestationRecord, error) {
+	// Build a comma-separated list of quoted doc IDs for GraphQL _in filter
+	quoted := make([]string, 0, len(viewDocIds))
+	for _, id := range viewDocIds {
+		quoted = append(quoted, fmt.Sprintf("\"%s\"", id))
+	}
+	inList := strings.Join(quoted, ", ")
+
+	query := fmt.Sprintf(`query {
+        AttestationRecord_%s (filter: {attested_doc: {_in: [%s]}}) {
+            attested_doc
+            source_doc
+            signatures {
+                identity
+                value
+                type
+            }
+        }
+    }`, associatedViewName, inList)
+	records, err := defra.QueryArray[AttestationRecord](ctx, defraNode, query)
+	if err != nil {
+		return nil, fmt.Errorf("Error fetching attestation record: %w", err)
+	}
+	if len(records) == 0 {
+		return nil, fmt.Errorf("No attestation records found with query: %s", query)
+	}
+	return records, nil
 }
