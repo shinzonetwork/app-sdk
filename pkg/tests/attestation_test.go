@@ -16,15 +16,8 @@ func TestGetAttestationRecords(t *testing.T) {
 	defraNode, err := defra.StartDefraInstanceWithTestConfig(t, defra.DefaultConfig, defra.NewSchemaApplierFromProvidedSchema(`type AttestationRecord_SampleView {
 	attested_doc: String
     source_doc: String
-	signatures: [IndexerSignature_SampleView] @relation(name:"indexer_signatures")
-}
-
-type IndexerSignature_SampleView {
-	identity: String @index
-	value: String @index (unique: true)
-	type: String 
-	attestation: AttestationRecord_SampleView @relation(name:"indexer_signatures")
-}`), "AttestationRecord_SampleView", "IndexerSignature_SampleView")
+	CIDs: [String]
+}`), "AttestationRecord_SampleView")
 	require.NoError(t, err)
 	defer defraNode.Close(ctx)
 
@@ -49,6 +42,6 @@ type IndexerSignature_SampleView {
 		if record.AttestedDocId != "ArbitraryDocId: 1" && record.AttestedDocId != "ArbitraryDocId: 7" {
 			t.Fatalf("Encountered unexpected AttestedDocId: %s", record.AttestedDocId)
 		}
-		require.Len(t, record.Signatures, 2)
+		require.Len(t, record.CIDs, 2)
 	}
 }
