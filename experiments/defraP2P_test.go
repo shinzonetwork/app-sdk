@@ -10,8 +10,8 @@ import (
 	"github.com/shinzonetwork/app-sdk/pkg/defra"
 	"github.com/shinzonetwork/app-sdk/pkg/logger"
 	"github.com/sourcenetwork/defradb/http"
-	netConfig "github.com/sourcenetwork/defradb/net/config"
 	"github.com/sourcenetwork/defradb/node"
+	"github.com/sourcenetwork/go-p2p"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +32,7 @@ func TestSimpleP2PReplication(t *testing.T) {
 		node.WithDisableP2P(false),
 		node.WithStorePath(t.TempDir()),
 		http.WithAddress(defraUrl),
-		netConfig.WithListenAddresses(listenAddress),
+		p2p.WithListenAddresses(listenAddress),
 	}
 	ctx := context.Background()
 	writerDefra := StartDefraInstance(t, ctx, options)
@@ -43,7 +43,7 @@ func TestSimpleP2PReplication(t *testing.T) {
 		node.WithDisableP2P(false),
 		node.WithStorePath(t.TempDir()),
 		http.WithAddress(defraUrl),
-		netConfig.WithListenAddresses(listenAddress),
+		p2p.WithListenAddresses(listenAddress),
 	}
 	readerDefra := StartDefraInstance(t, ctx, options)
 	defer readerDefra.Close(ctx)
@@ -62,7 +62,9 @@ func TestSimpleP2PReplication(t *testing.T) {
 	result, err = getUserName(ctx, readerDefra)
 	require.Error(t, err)
 
-	err = writerDefra.DB.SetReplicator(ctx, readerDefra.DB.PeerInfo())
+	peerInfo, err := readerDefra.DB.PeerInfo()
+	require.NoError(t, err)
+	err = writerDefra.DB.SetReplicator(ctx, peerInfo)
 	require.NoError(t, err)
 
 	result, err = getUserName(ctx, readerDefra)
@@ -84,11 +86,11 @@ func getUserName(ctx context.Context, readerDefra *node.Node) (string, error) {
 			name
 		}
 	}`
-	
+
 	type UserResult struct {
 		Name string `json:"name"`
 	}
-	
+
 	user, err := defra.QuerySingle[UserResult](ctx, readerDefra, query)
 	if err != nil {
 		return "", fmt.Errorf("Error querying user: %v", err)
@@ -141,7 +143,7 @@ func TestMultiTenantP2PReplication_ManualReplicatorAssignment(t *testing.T) {
 			node.WithDisableP2P(false),
 			node.WithStorePath(t.TempDir()),
 			http.WithAddress(defraUrl),
-			netConfig.WithListenAddresses(listenAddress),
+			p2p.WithListenAddresses(listenAddress),
 		}
 		newDefraInstance := StartDefraInstance(t, ctx, readerDefraOptions)
 		defer newDefraInstance.Close(ctx)
@@ -151,8 +153,9 @@ func TestMultiTenantP2PReplication_ManualReplicatorAssignment(t *testing.T) {
 		addSchema(t, ctx, newDefraInstance)
 
 		assertDefraInstanceDoesNotHaveData(t, ctx, newDefraInstance)
-
-		err := previousDefra.DB.SetReplicator(ctx, newDefraInstance.DB.PeerInfo())
+		peerInfo, err := newDefraInstance.DB.PeerInfo()
+		require.NoError(t, err)
+		err = previousDefra.DB.SetReplicator(ctx, peerInfo)
 		require.NoError(t, err)
 		readerDefraInstances = append(readerDefraInstances, newDefraInstance)
 		previousDefra = newDefraInstance
@@ -182,12 +185,14 @@ func TestMultiTenantP2PReplication_ConnectToPeers(t *testing.T) {
 			node.WithDisableP2P(false),
 			node.WithStorePath(t.TempDir()),
 			http.WithAddress(defraUrl),
-			netConfig.WithListenAddresses(listenAddress),
+			p2p.WithListenAddresses(listenAddress),
 		}
 		newDefraInstance := StartDefraInstance(t, ctx, readerDefraOptions)
 		defer newDefraInstance.Close(ctx)
 
-		err = newDefraInstance.DB.Connect(ctx, previousDefra.DB.PeerInfo())
+		peerInfo, err := previousDefra.DB.PeerInfo()
+		require.NoError(t, err)
+		err = newDefraInstance.DB.Connect(ctx, peerInfo)
 		require.NoError(t, err)
 
 		addSchema(t, ctx, newDefraInstance)
@@ -226,7 +231,7 @@ func createWriterDefraInstanceAndApplySchema(t *testing.T, ctx context.Context, 
 		node.WithDisableP2P(false),
 		node.WithStorePath(t.TempDir()),
 		http.WithAddress(defraUrl),
-		netConfig.WithListenAddresses(listenAddress),
+		p2p.WithListenAddresses(listenAddress),
 	}
 	writerDefra := StartDefraInstance(t, ctx, options)
 
@@ -277,14 +282,16 @@ func TestMultiTenantP2PReplication_ConnectToBigPeer(t *testing.T) {
 		node.WithDisableP2P(false),
 		node.WithStorePath(t.TempDir()),
 		http.WithAddress(defraUrl),
-		netConfig.WithListenAddresses(listenAddress),
+		p2p.WithListenAddresses(listenAddress),
 	}
 	writerDefra := createDefraInstanceAndApplySchema(t, ctx, options)
 	defer writerDefra.Close(ctx)
 	err = writerDefra.DB.AddP2PCollections(ctx, "User")
 	require.NoError(t, err)
 
-	err = writerDefra.DB.Connect(ctx, bigPeer.DB.PeerInfo())
+	peerInfo, err := bigPeer.DB.PeerInfo()
+	require.NoError(t, err)
+	err = writerDefra.DB.Connect(ctx, peerInfo)
 	require.NoError(t, err)
 
 	readerDefraInstances := []*node.Node{}
@@ -294,14 +301,16 @@ func TestMultiTenantP2PReplication_ConnectToBigPeer(t *testing.T) {
 			node.WithDisableP2P(false),
 			node.WithStorePath(t.TempDir()),
 			http.WithAddress(defraUrl),
-			netConfig.WithListenAddresses(listenAddress),
+			p2p.WithListenAddresses(listenAddress),
 		}
 		newDefraInstance := StartDefraInstance(t, ctx, readerDefraOptions)
 		defer newDefraInstance.Close(ctx)
 
 		assertDefraInstanceDoesNotHaveData(t, ctx, newDefraInstance)
 
-		err = newDefraInstance.DB.Connect(ctx, bigPeer.DB.PeerInfo())
+		peerInfo, err := bigPeer.DB.PeerInfo()
+		require.NoError(t, err)
+		err = newDefraInstance.DB.Connect(ctx, peerInfo)
 		require.NoError(t, err)
 
 		addSchema(t, ctx, newDefraInstance)
@@ -348,14 +357,16 @@ func TestMultiTenantP2PReplication_ConnectToBigPeerWhoDoesNotDeclareInterestInTo
 		node.WithDisableP2P(false),
 		node.WithStorePath(t.TempDir()),
 		http.WithAddress(defraUrl),
-		netConfig.WithListenAddresses(listenAddress),
+		p2p.WithListenAddresses(listenAddress),
 	}
 	writerDefra := createDefraInstanceAndApplySchema(t, ctx, options)
 	defer writerDefra.Close(ctx)
 	err = writerDefra.DB.AddP2PCollections(ctx, "User")
 	require.NoError(t, err)
 
-	err = writerDefra.DB.Connect(ctx, bigPeer.DB.PeerInfo())
+	peerInfo, err := bigPeer.DB.PeerInfo()
+	require.NoError(t, err)
+	err = writerDefra.DB.Connect(ctx, peerInfo)
 	require.NoError(t, err)
 
 	readerDefraInstances := []*node.Node{}
@@ -365,14 +376,16 @@ func TestMultiTenantP2PReplication_ConnectToBigPeerWhoDoesNotDeclareInterestInTo
 			node.WithDisableP2P(false),
 			node.WithStorePath(t.TempDir()),
 			http.WithAddress(defraUrl),
-			netConfig.WithListenAddresses(listenAddress),
+			p2p.WithListenAddresses(listenAddress),
 		}
 		newDefraInstance := StartDefraInstance(t, ctx, readerDefraOptions)
 		defer newDefraInstance.Close(ctx)
 
 		assertDefraInstanceDoesNotHaveData(t, ctx, newDefraInstance)
 
-		err = newDefraInstance.DB.Connect(ctx, bigPeer.DB.PeerInfo())
+		peerInfo, err := bigPeer.DB.PeerInfo()
+		require.NoError(t, err)
+		err = newDefraInstance.DB.Connect(ctx, peerInfo)
 		require.NoError(t, err, fmt.Sprintf("Unexpected error connecting reader node instance %d to big peer: %v", (i+1), err))
 
 		addSchema(t, ctx, newDefraInstance)

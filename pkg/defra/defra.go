@@ -13,8 +13,8 @@ import (
 	"github.com/sourcenetwork/defradb/acp/identity"
 	"github.com/sourcenetwork/defradb/crypto"
 	"github.com/sourcenetwork/defradb/http"
-	netConfig "github.com/sourcenetwork/defradb/net/config"
 	"github.com/sourcenetwork/defradb/node"
+	"github.com/sourcenetwork/go-p2p"
 )
 
 var DefaultConfig *config.Config = &config.Config{
@@ -84,7 +84,7 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 		node.WithNodeIdentity(identity.Identity(nodeIdentity)),
 	}
 	if len(listenAddress) > 0 {
-		options = append(options, netConfig.WithListenAddresses(listenAddress))
+		options = append(options, p2p.WithListenAddresses(listenAddress))
 	}
 	defraNode, err := node.New(ctx, options...)
 	if err != nil {
@@ -97,17 +97,9 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 	}
 
 	// Connect to bootstrap peers
-	peers, errors := bootstrapIntoPeers(cfg.DefraDB.P2P.BootstrapPeers)
-	for _, err := range errors {
-		logger.Sugar.Errorf("Error translating bootstrapped peers: %v", err)
-	}
-	errors = connectToPeers(ctx, defraNode, peers)
-	if len(errors) > 0 {
-		if len(errors) == len(peers) {
-			defer defraNode.Close(ctx)
-			return nil, fmt.Errorf("failed to connect to any peers, with errors: %v", errors)
-		}
-		logger.Sugar.Errorf("Failed to connect to %d peers, with errors: %v", len(errors), errors)
+	err = connectToPeers(ctx, defraNode, cfg.DefraDB.P2P.BootstrapPeers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to any peers, with error: %w", err)
 	}
 
 	err = schemaApplier.ApplySchema(ctx, defraNode)
