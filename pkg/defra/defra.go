@@ -2,6 +2,7 @@ package defra
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -41,22 +42,28 @@ const keyFileName string = "defra_identity.key"
 
 // Key Management Implementation Notes:
 // 
-// The current implementation provides a foundation for persistent DefraDB identity management.
-// It replaces the previous ephemeral key generation with a system that:
-// 1. Checks for existing identity storage
-// 2. Generates new identity if none exists
-// 3. Saves a marker file to indicate persistence intent
-// 4. Loads from storage on subsequent runs
+// This implementation provides persistent DefraDB identity management by:
+// 1. Extracting private key bytes from generated FullIdentity
+// 2. Storing the raw key bytes as hex-encoded strings in secure files (0600 permissions)
+// 3. Reconstructing the same identity from stored private key bytes on subsequent runs
+// 4. Ensuring the same cryptographic identity is used across application restarts
 //
-// Current Status: PLACEHOLDER IMPLEMENTATION
-// - The system saves/loads a marker file but generates new identities each time
-// - This demonstrates the key management pattern without complex cryptographic operations
+// Current Status: FULLY FUNCTIONAL
+// - Private keys are properly extracted and stored
+// - Identities are reconstructed from stored keys, maintaining consistency
+// - File permissions are secure (0600)
+// - Comprehensive error handling and logging
 //
-// Future Improvements:
-// - Implement proper deterministic key derivation from a stored seed
+// Security Features:
+// - Keys stored in DefraDB store directory (.defra/defra_identity.key)
+// - File permissions restricted to owner only (0600)
+// - Hex encoding for safe text storage
+// - Proper error handling for corrupted or missing key files
+//
+// Future Enhancements:
 // - Add support for keyring integration using cfg.DefraDB.KeyringSecret
-// - Consider using BIP39 mnemonic phrases for better key recovery
-// - Add key rotation and backup mechanisms
+// - Consider key rotation and backup mechanisms
+// - Add optional encryption of stored key files
 
 // getOrCreateNodeIdentity retrieves an existing node identity from storage or creates a new one
 func getOrCreateNodeIdentity(storePath string) (identity.Identity, error) {
@@ -84,45 +91,75 @@ func getOrCreateNodeIdentity(storePath string) (identity.Identity, error) {
 	return nodeIdentity, nil
 }
 
-// saveNodeIdentity saves a node identity marker to indicate persistence
+// saveNodeIdentity saves the private key bytes of a node identity for persistence
 func saveNodeIdentity(keyPath string, nodeIdentity identity.Identity) error {
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(keyPath), 0755); err != nil {
 		return fmt.Errorf("failed to create key directory: %w", err)
 	}
 	
-	// For now, just save a marker that indicates we want to persist this identity
-	// In a production system, you would implement proper key derivation from a seed
-	marker := "defra_identity_v1"
+	// Cast to FullIdentity to access private key
+	fullIdentity, ok := nodeIdentity.(identity.FullIdentity)
+	if !ok {
+		return fmt.Errorf("identity is not a FullIdentity, cannot extract private key")
+	}
+	
+	// Get the private key from the identity
+	privateKey := fullIdentity.PrivateKey()
+	if privateKey == nil {
+		return fmt.Errorf("failed to get private key from identity")
+	}
+	
+	// Get raw key bytes
+	keyBytes := privateKey.Raw()
+	if len(keyBytes) == 0 {
+		return fmt.Errorf("private key has no raw bytes")
+	}
+	
+	// Encode as hex string for storage
+	keyHex := hex.EncodeToString(keyBytes)
 	
 	// Write to file with restricted permissions
-	if err := os.WriteFile(keyPath, []byte(marker), 0600); err != nil {
+	if err := os.WriteFile(keyPath, []byte(keyHex), 0600); err != nil {
 		return fmt.Errorf("failed to write key file: %w", err)
 	}
 	
-	logger.Sugar.With("path", keyPath).Info("DefraDB identity marker saved to storage")
+	logger.Sugar.With("path", keyPath).Info("DefraDB identity private key saved to storage")
 	return nil
 }
 
-// loadNodeIdentity generates a new identity (placeholder for proper key derivation)
+// loadNodeIdentity loads a node identity from stored private key bytes
 func loadNodeIdentity(keyPath string) (identity.Identity, error) {
-	// Read the marker file to verify it exists
-	_, err := os.ReadFile(keyPath)
+	// Read the stored key file
+	keyHex, err := os.ReadFile(keyPath)
 	if err != nil {
 		var emptyIdentity identity.Identity
 		return emptyIdentity, fmt.Errorf("failed to read key file: %w", err)
 	}
 	
-	// For now, generate a new identity each time
-	// TODO: Implement proper deterministic key derivation from stored seed
-	nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1)
+	// Decode hex string to bytes
+	keyBytes, err := hex.DecodeString(string(keyHex))
 	if err != nil {
 		var emptyIdentity identity.Identity
-		return emptyIdentity, fmt.Errorf("failed to generate identity: %w", err)
+		return emptyIdentity, fmt.Errorf("failed to decode key hex: %w", err)
 	}
 	
-	logger.Sugar.With("path", keyPath).Info("DefraDB identity generated (placeholder implementation)")
-	return nodeIdentity, nil
+	// Reconstruct private key from bytes
+	privateKey, err := crypto.PrivateKeyFromBytes(crypto.KeyTypeSecp256k1, keyBytes)
+	if err != nil {
+		var emptyIdentity identity.Identity
+		return emptyIdentity, fmt.Errorf("failed to reconstruct private key: %w", err)
+	}
+	
+	// Reconstruct identity from private key
+	fullIdentity, err := identity.FromPrivateKey(privateKey)
+	if err != nil {
+		var emptyIdentity identity.Identity
+		return emptyIdentity, fmt.Errorf("failed to reconstruct identity from private key: %w", err)
+	}
+	
+	logger.Sugar.With("path", keyPath).Info("DefraDB identity successfully loaded from storage")
+	return fullIdentity, nil
 }
 
 func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collectionsOfInterest ...string) (*node.Node, error) {
