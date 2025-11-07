@@ -125,7 +125,16 @@ func TestMultiTenantP2PReplication_ManualReplicatorAssignment(t *testing.T) {
 	defraUrl := "127.0.0.1:0"
 	ctx := context.Background()
 	writerDefra := createWriterDefraInstanceAndPostBasicData(t, ctx, defraUrl, listenAddress)
-	defer writerDefra.Close(ctx)
+	
+	// Collect all instances for proper cleanup
+	allInstances := []*node.Node{writerDefra}
+	defer func() {
+		// Close instances in reverse order with delays to prevent race conditions
+		for i := len(allInstances) - 1; i >= 0; i-- {
+			allInstances[i].Close(ctx)
+			time.Sleep(100 * time.Millisecond) // Allow time for cleanup
+		}
+	}()
 
 	previousDefra := writerDefra
 	readerDefraInstances := []*node.Node{}
@@ -138,7 +147,7 @@ func TestMultiTenantP2PReplication_ManualReplicatorAssignment(t *testing.T) {
 			netConfig.WithListenAddresses(listenAddress),
 		}
 		newDefraInstance := StartDefraInstance(t, ctx, readerDefraOptions)
-		defer newDefraInstance.Close(ctx)
+		allInstances = append(allInstances, newDefraInstance)
 
 		assertDefraInstanceDoesNotHaveData(t, ctx, newDefraInstance)
 
@@ -164,7 +173,17 @@ func TestMultiTenantP2PReplication_ConnectToPeers(t *testing.T) {
 	defraUrl := "127.0.0.1:0"
 	ctx := context.Background()
 	writerDefra := createWriterDefraInstanceAndApplySchema(t, ctx, defraUrl, listenAddress)
-	defer writerDefra.Close(ctx)
+	
+	// Collect all instances for proper cleanup
+	allInstances := []*node.Node{writerDefra}
+	defer func() {
+		// Close instances in reverse order with delays to prevent race conditions
+		for i := len(allInstances) - 1; i >= 0; i-- {
+			allInstances[i].Close(ctx)
+			time.Sleep(100 * time.Millisecond) // Allow time for cleanup
+		}
+	}()
+	
 	err := writerDefra.DB.AddP2PCollections(ctx, "User")
 	require.NoError(t, err)
 
@@ -179,7 +198,7 @@ func TestMultiTenantP2PReplication_ConnectToPeers(t *testing.T) {
 			netConfig.WithListenAddresses(listenAddress),
 		}
 		newDefraInstance := StartDefraInstance(t, ctx, readerDefraOptions)
-		defer newDefraInstance.Close(ctx)
+		allInstances = append(allInstances, newDefraInstance)
 
 		err = newDefraInstance.DB.Connect(ctx, previousDefra.DB.PeerInfo())
 		require.NoError(t, err)
