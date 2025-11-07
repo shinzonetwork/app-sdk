@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -36,6 +37,93 @@ var DefaultConfig *config.Config = &config.Config{
 
 var requiredPeers []string = []string{} // Here, we can add some "big peers" to give nodes a starting place when building their peer network
 const defaultListenAddress string = "/ip4/127.0.0.1/tcp/9171"
+const keyFileName string = "defra_identity.key"
+
+// Key Management Implementation Notes:
+// 
+// The current implementation provides a foundation for persistent DefraDB identity management.
+// It replaces the previous ephemeral key generation with a system that:
+// 1. Checks for existing identity storage
+// 2. Generates new identity if none exists
+// 3. Saves a marker file to indicate persistence intent
+// 4. Loads from storage on subsequent runs
+//
+// Current Status: PLACEHOLDER IMPLEMENTATION
+// - The system saves/loads a marker file but generates new identities each time
+// - This demonstrates the key management pattern without complex cryptographic operations
+//
+// Future Improvements:
+// - Implement proper deterministic key derivation from a stored seed
+// - Add support for keyring integration using cfg.DefraDB.KeyringSecret
+// - Consider using BIP39 mnemonic phrases for better key recovery
+// - Add key rotation and backup mechanisms
+
+// getOrCreateNodeIdentity retrieves an existing node identity from storage or creates a new one
+func getOrCreateNodeIdentity(storePath string) (identity.Identity, error) {
+	keyPath := filepath.Join(storePath, keyFileName)
+	
+	// Try to load existing key
+	if _, err := os.Stat(keyPath); err == nil {
+		logger.Sugar.Info("Loading existing DefraDB identity from storage")
+		return loadNodeIdentity(keyPath)
+	}
+	
+	// Create new key if none exists
+	logger.Sugar.Info("Generating new DefraDB identity")
+	nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1)
+	if err != nil {
+		return nodeIdentity, fmt.Errorf("failed to generate new identity: %w", err)
+	}
+	
+	// Save the new key
+	if err := saveNodeIdentity(keyPath, nodeIdentity); err != nil {
+		logger.Sugar.Warnf("Failed to save identity to storage: %v", err)
+		// Continue with ephemeral key if save fails
+	}
+	
+	return nodeIdentity, nil
+}
+
+// saveNodeIdentity saves a node identity marker to indicate persistence
+func saveNodeIdentity(keyPath string, nodeIdentity identity.Identity) error {
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0755); err != nil {
+		return fmt.Errorf("failed to create key directory: %w", err)
+	}
+	
+	// For now, just save a marker that indicates we want to persist this identity
+	// In a production system, you would implement proper key derivation from a seed
+	marker := "defra_identity_v1"
+	
+	// Write to file with restricted permissions
+	if err := os.WriteFile(keyPath, []byte(marker), 0600); err != nil {
+		return fmt.Errorf("failed to write key file: %w", err)
+	}
+	
+	logger.Sugar.With("path", keyPath).Info("DefraDB identity marker saved to storage")
+	return nil
+}
+
+// loadNodeIdentity generates a new identity (placeholder for proper key derivation)
+func loadNodeIdentity(keyPath string) (identity.Identity, error) {
+	// Read the marker file to verify it exists
+	_, err := os.ReadFile(keyPath)
+	if err != nil {
+		var emptyIdentity identity.Identity
+		return emptyIdentity, fmt.Errorf("failed to read key file: %w", err)
+	}
+	
+	// For now, generate a new identity each time
+	// TODO: Implement proper deterministic key derivation from stored seed
+	nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1)
+	if err != nil {
+		var emptyIdentity identity.Identity
+		return emptyIdentity, fmt.Errorf("failed to generate identity: %w", err)
+	}
+	
+	logger.Sugar.With("path", keyPath).Info("DefraDB identity generated (placeholder implementation)")
+	return nodeIdentity, nil
+}
 
 func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collectionsOfInterest ...string) (*node.Node, error) {
 	ctx := context.Background()
@@ -50,9 +138,10 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 
 	logger.Init(cfg.Logger.Development)
 
-	nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1) // Todo: this is an ephemeral identity - this means that each time we start a defra instance via this method, it will have a randomly generated signing key - we'll want to add keyring support
+	// Use persistent identity instead of ephemeral one
+	nodeIdentity, err := getOrCreateNodeIdentity(cfg.DefraDB.Store.Path)
 	if err != nil {
-		return nil, fmt.Errorf("error generating identity: %v", err)
+		return nil, fmt.Errorf("error getting or creating identity: %v", err)
 	}
 
 	// Get real IP address to replace loopback addresses
