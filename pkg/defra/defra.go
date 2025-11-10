@@ -17,6 +17,7 @@ import (
 	"github.com/sourcenetwork/defradb/http"
 	netConfig "github.com/sourcenetwork/defradb/net/config"
 	"github.com/sourcenetwork/defradb/node"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 )
 
 var DefaultConfig *config.Config = &config.Config{
@@ -162,6 +163,43 @@ func loadNodeIdentity(keyPath string) (identity.Identity, error) {
 	return fullIdentity, nil
 }
 
+// createLibP2PKeyFromIdentity creates a LibP2P private key from a DefraDB identity
+// This ensures the LibP2P peer ID is deterministically derived from the same identity
+func createLibP2PKeyFromIdentity(nodeIdentity identity.Identity) (libp2pcrypto.PrivKey, error) {
+	// Cast to FullIdentity to access private key
+	fullIdentity, ok := nodeIdentity.(identity.FullIdentity)
+	if !ok {
+		return nil, fmt.Errorf("identity is not a FullIdentity, cannot extract private key")
+	}
+	
+	// Get the private key from the identity
+	privateKey := fullIdentity.PrivateKey()
+	if privateKey == nil {
+		return nil, fmt.Errorf("failed to get private key from identity")
+	}
+	
+	// Get raw key bytes
+	keyBytes := privateKey.Raw()
+	if len(keyBytes) == 0 {
+		return nil, fmt.Errorf("private key has no raw bytes")
+	}
+	
+	// DefraDB expects Ed25519 keys, but DefraDB identities use secp256k1
+	// We need to derive an Ed25519 key deterministically from the secp256k1 key
+	// Use the secp256k1 key bytes as seed for Ed25519 key generation
+	if len(keyBytes) != 32 {
+		return nil, fmt.Errorf("expected 32-byte secp256k1 key, got %d bytes", len(keyBytes))
+	}
+	
+	// Generate Ed25519 key from secp256k1 seed
+	libp2pPrivKey, _, err := libp2pcrypto.GenerateEd25519Key(strings.NewReader(string(keyBytes)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate Ed25519 key from identity seed: %w", err)
+	}
+	
+	return libp2pPrivKey, nil
+}
+
 func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collectionsOfInterest ...string) (*node.Node, error) {
 	ctx := context.Background()
 
@@ -179,6 +217,18 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 	nodeIdentity, err := getOrCreateNodeIdentity(cfg.DefraDB.Store.Path)
 	if err != nil {
 		return nil, fmt.Errorf("error getting or creating identity: %v", err)
+	}
+
+	// Create LibP2P private key from the same identity to ensure consistent peer ID
+	libp2pPrivKey, err := createLibP2PKeyFromIdentity(nodeIdentity)
+	if err != nil {
+		return nil, fmt.Errorf("error creating LibP2P private key from identity: %v", err)
+	}
+
+	// Get raw bytes for DefraDB's netConfig.WithPrivateKey
+	libp2pKeyBytes, err := libp2pPrivKey.Raw()
+	if err != nil {
+		return nil, fmt.Errorf("error getting LibP2P private key bytes: %v", err)
 	}
 
 	// Get real IP address to replace loopback addresses
@@ -212,6 +262,8 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 	if len(listenAddress) > 0 {
 		options = append(options, netConfig.WithListenAddresses(listenAddress))
 	}
+	// Use the persistent LibP2P private key to ensure consistent peer ID
+	options = append(options, netConfig.WithPrivateKey(libp2pKeyBytes))
 	defraNode, err := node.New(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create defra node: %v ", err)
