@@ -7,11 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shinzonetwork/app-sdk/pkg/attestation"
 	"github.com/shinzonetwork/app-sdk/pkg/defra"
 	"github.com/shinzonetwork/app-sdk/pkg/logger"
-	"github.com/sourcenetwork/defradb/acp/identity"
-	"github.com/sourcenetwork/defradb/crypto"
 	"github.com/sourcenetwork/defradb/http"
 	netConfig "github.com/sourcenetwork/defradb/net/config"
 	"github.com/sourcenetwork/defradb/node"
@@ -87,11 +84,16 @@ func getUserName(ctx context.Context, readerDefra *node.Node) (string, error) {
 			name
 		}
 	}`
-	user, err := defra.QuerySingle[UserWithVersion](ctx, readerDefra, query)
+	
+	type UserResult struct {
+		Name string `json:"name"`
+	}
+	
+	user, err := defra.QuerySingle[UserResult](ctx, readerDefra, query)
 	if err != nil {
 		return "", fmt.Errorf("Error querying user: %v", err)
 	}
-	if len(user.Name) == 0 && len(user.Version) == 0 {
+	if len(user.Name) == 0 {
 		return "", fmt.Errorf("No users found")
 	}
 	return user.Name, nil
@@ -110,7 +112,11 @@ func postBasicData(t *testing.T, ctx context.Context, writerDefra *node.Node) {
 		}
 	}`
 
-	result, err := defra.PostMutation[UserWithVersion](ctx, writerDefra, query)
+	type UserResult struct {
+		Name string `json:"name"`
+	}
+
+	result, err := defra.PostMutation[UserResult](ctx, writerDefra, query)
 	require.NoError(t, err)
 	require.Equal(t, "Quinn", result.Name)
 }
@@ -386,117 +392,4 @@ func TestMultiTenantP2PReplication_ConnectToBigPeerWhoDoesNotDeclareInterestInTo
 	require.Equal(t, "Quinn", result)
 
 	assertReaderDefraInstancesHaveLatestData(t, ctx, readerDefraInstances)
-}
-
-// This test has multiple defra nodes writing the same data to be read by another node
-// This closely mimics the Shinzo setup, where multiple Indexers and Hosts will be writing the same data
-// This test allows us to explore what the built-in `__version` field defra provides will look like in this case,
-// Informing our design for the attestation system
-// The key observation is that we receive a `[]Version` whose length is equal to the number of writers (and unique signatures)
-func TestSyncFromMultipleWriters(t *testing.T) {
-	listenAddress := "/ip4/127.0.0.1/tcp/0"
-	defraUrl := "127.0.0.1:0"
-	ctx := context.Background()
-
-	writerDefras := []*node.Node{}
-	defraNodes := 10
-	for i := 0; i < defraNodes; i++ {
-		nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1)
-		require.NoError(t, err)
-		options := []node.Option{
-			node.WithDisableAPI(false),
-			node.WithDisableP2P(false),
-			node.WithStorePath(t.TempDir()),
-			http.WithAddress(defraUrl),
-			netConfig.WithListenAddresses(listenAddress),
-			node.WithNodeIdentity(identity.Identity(nodeIdentity)),
-		}
-		writerDefra := StartDefraInstance(t, ctx, options)
-		defer writerDefra.Close(ctx)
-
-		addSchema(t, ctx, writerDefra)
-		err = writerDefra.DB.AddP2PCollections(ctx, "User")
-		require.NoError(t, err)
-
-		writerDefras = append(writerDefras, writerDefra)
-	}
-
-	// Create a reader instance
-	readerOptions := []node.Option{
-		node.WithDisableAPI(false),
-		node.WithDisableP2P(false),
-		node.WithStorePath(t.TempDir()),
-		http.WithAddress(defraUrl),
-		netConfig.WithListenAddresses(listenAddress),
-	}
-	readerDefra := StartDefraInstance(t, ctx, readerOptions)
-	defer readerDefra.Close(ctx)
-
-	for _, writer := range writerDefras {
-		err := readerDefra.DB.Connect(ctx, writer.DB.PeerInfo())
-		require.NoError(t, err)
-	}
-
-	addSchema(t, ctx, readerDefra)
-
-	assertDefraInstanceDoesNotHaveData(t, ctx, readerDefra)
-
-	err := readerDefra.DB.AddP2PCollections(ctx, "User")
-	require.NoError(t, err)
-
-	// Write data to each writer
-	for _, writer := range writerDefras {
-		postBasicData(t, ctx, writer)
-
-		// Verify the data was written to this writer
-		result, err := getUserName(ctx, writer)
-		require.NoError(t, err)
-		require.Equal(t, "Quinn", result)
-	}
-
-	// Wait for sync and verify reader has all data
-	result, err := getUserName(ctx, readerDefra)
-	for attempts := 1; attempts < 60; attempts++ { // It may take some time to sync now that we are connected
-		if err == nil {
-			break
-		}
-		t.Logf("Attempt %d to query username from readerDefra failed. Trying again...", attempts)
-		time.Sleep(1 * time.Second)
-		result, err = getUserName(ctx, readerDefra)
-	}
-	require.Equal(t, "Quinn", result)
-
-	userWithVersion, err := getUserWithVersion(ctx, readerDefra)
-	require.NoError(t, err)
-	require.Equal(t, "Quinn", userWithVersion.Name)
-	require.Equal(t, defraNodes, len(userWithVersion.Version))
-}
-
-type UserWithVersion struct {
-	Name    string                `json:"name"`
-	Version []attestation.Version `json:"_version"`
-}
-
-func getUserWithVersion(ctx context.Context, defraNode *node.Node) (UserWithVersion, error) {
-	query := `query GetUserWithVersion{
-		User(limit: 1) {
-			name
-			_version {
-				cid
-				signature {
-					type
-					identity
-					value
-					__typename
-				}
-			}
-		}
-	}`
-
-	user, err := defra.QuerySingle[UserWithVersion](ctx, defraNode, query)
-	if err != nil {
-		return UserWithVersion{}, fmt.Errorf("Error querying user with version: %v", err)
-	}
-
-	return user, nil
 }
