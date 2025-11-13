@@ -6,6 +6,7 @@ toolchain go1.24.7
 
 require (
 	github.com/joho/godotenv v1.5.1
+	github.com/shinzonetwork/view-creator v0.0.0-20250708160313-7af9785b76ec
 	github.com/sourcenetwork/defradb v0.19.1-0.20250917180411-017277b0bfe4
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
@@ -13,6 +14,7 @@ require (
 )
 
 require (
+	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.3-20241127180247-a33202765966.1 // indirect
 	cel.dev/expr v0.23.0 // indirect
 	cloud.google.com/go v0.116.0 // indirect
@@ -315,7 +317,6 @@ require (
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
-	github.com/shinzonetwork/view-creator v0.0.0-20250708160313-7af9785b76ec // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/sourcenetwork/acp_core v0.4.1 // indirect
@@ -352,6 +353,7 @@ require (
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	github.com/zalando/go-keyring v0.2.6 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect
 	github.com/zondax/hid v0.9.2 // indirect
 	github.com/zondax/ledger-go v0.14.3 // indirect
