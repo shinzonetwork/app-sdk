@@ -9,7 +9,7 @@ import (
 	"github.com/sourcenetwork/defradb/node"
 )
 
-func bootstrapIntoPeers(configuredBootstrapPeers []string) ([]client.PeerInfo, []error) {
+func BootstrapIntoPeers(configuredBootstrapPeers []string) ([]client.PeerInfo, []error) {
 	peers := []client.PeerInfo{}
 	errors := []error{}
 

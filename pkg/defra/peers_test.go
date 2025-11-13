@@ -80,7 +80,7 @@ func TestBootstrapIntoPeers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			peers, errors := bootstrapIntoPeers(tt.input)
+			peers, errors := BootstrapIntoPeers(tt.input)
 
 			if len(errors) != tt.expectedErrors {
 				t.Errorf("Expected %d errors, got %d", tt.expectedErrors, len(errors))
@@ -268,7 +268,7 @@ func TestBootstrapIntoPeersAndBack(t *testing.T) {
 	}
 
 	// Convert bootstrap strings to peers
-	peers, errors := bootstrapIntoPeers(originalBootstrap)
+	peers, errors := BootstrapIntoPeers(originalBootstrap)
 	if len(errors) > 0 {
 		t.Errorf("Unexpected errors during bootstrap to peers conversion: %v", errors)
 	}
