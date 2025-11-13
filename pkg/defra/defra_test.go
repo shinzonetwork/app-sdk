@@ -30,3 +30,21 @@ func TestStartDefraUsingConfig(t *testing.T) {
 	require.NoError(t, err)
 	myNode.Close(context.Background())
 }
+
+func TestSubsequentRestartsYieldTheSameIdentity(t *testing.T) {
+	myNode, err := StartDefraInstance(DefaultConfig, &MockSchemaApplierThatSucceeds{})
+	require.NoError(t, err)
+
+	peerInfo := myNode.DB.PeerInfo()
+	require.NotNil(t, peerInfo)
+	require.Greater(t, len(peerInfo.ID), 0)
+
+	err = myNode.Close(t.Context())
+	require.NoError(t, err)
+
+	myNode, err = StartDefraInstance(DefaultConfig, &MockSchemaApplierThatSucceeds{})
+	require.NoError(t, err)
+
+	newPeerInfo := myNode.DB.PeerInfo()
+	require.Equal(t, peerInfo.ID, newPeerInfo.ID)
+}
