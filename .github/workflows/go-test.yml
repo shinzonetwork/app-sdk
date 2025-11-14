@@ -31,4 +31,6 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: Run tests
+      env:
+        DEFRA_KEYRING_SECRET: testsecret
       run: go test ./...
