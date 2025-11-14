@@ -2255,8 +2255,6 @@ github.com/sergi/go-diff v1.1.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNX
 github.com/shazow/go-diff v0.0.0-20160112020656-b6b7b6733b8c/go.mod h1:/PevMnwAxekIXwN8qQyfc5gl2NlkB3CQlkizAbOkeBs=
 github.com/shinzonetwork/shinzo-host-client v0.0.0-20251105152353-1066c5154025 h1:2YBxxrzTrtELwUsJdG/Lz7fnk2uhLs9bpOyWJp8GE7k=
 github.com/shinzonetwork/shinzo-host-client v0.0.0-20251105152353-1066c5154025/go.mod h1:EilGqGNR1uekrP7+PkWe/2H617etgLh8iuzsB6ODo3c=
-github.com/shinzonetwork/view-creator v0.0.0-20250708160313-7af9785b76ec h1:+o6/UNVSABjHxYctVV//e5LJkskGiCRpHjl0Tnt3A6k=
-github.com/shinzonetwork/view-creator v0.0.0-20250708160313-7af9785b76ec/go.mod h1:ZQBTItczjnBe1GN7XGP3/zQEYyEWxAYlSRqK/g7aqWk=
 github.com/shinzonetwork/view-creator v0.0.0-20251113191457-a28acb09bf07 h1:EdzzvXBsNjd5nrDhFa48MgoVfu1LICUnKLW4L/dFcXw=
 github.com/shinzonetwork/view-creator v0.0.0-20251113191457-a28acb09bf07/go.mod h1:ZsdEDqYW0XIhLuS07T3uOShvbTL52HiPztqs4rHYW6o=
 github.com/shirou/gopsutil/v3 v3.22.6/go.mod h1:EdIubSnZhbAvBS1yJ7Xi+AShB/hxwLHOMz4MCYz7yMs=
