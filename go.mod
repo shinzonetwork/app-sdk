@@ -8,7 +8,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.43.0
 	github.com/shinzonetwork/shinzo-host-client v0.0.0-20251105152353-1066c5154025
-	github.com/shinzonetwork/view-creator v0.0.0-20250708160313-7af9785b76ec
+	github.com/shinzonetwork/view-creator v0.0.0-20251113191457-a28acb09bf07
 	github.com/sourcenetwork/defradb v0.20.0
 	github.com/sourcenetwork/go-p2p v0.1.4
 	github.com/stretchr/testify v1.11.1
