@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sourcenetwork/defradb/client"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBootstrapIntoPeers(t *testing.T) {
@@ -79,7 +80,7 @@ func TestBootstrapIntoPeers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			peers, errors := bootstrapIntoPeers(tt.input)
+			peers, errors := BootstrapIntoPeers(tt.input)
 
 			if len(errors) != tt.expectedErrors {
 				t.Errorf("Expected %d errors, got %d", tt.expectedErrors, len(errors))
@@ -267,7 +268,7 @@ func TestBootstrapIntoPeersAndBack(t *testing.T) {
 	}
 
 	// Convert bootstrap strings to peers
-	peers, errors := bootstrapIntoPeers(originalBootstrap)
+	peers, errors := BootstrapIntoPeers(originalBootstrap)
 	if len(errors) > 0 {
 		t.Errorf("Unexpected errors during bootstrap to peers conversion: %v", errors)
 	}
@@ -311,19 +312,20 @@ func TestConnectToPeers(t *testing.T) {
 			}
 		}()
 
-		connectToPeers(ctx, nil, peers)
+		peerString, errors := PeersIntoBootstrap(peers)
+		require.Len(t, errors, 0)
+
+		connectToPeers(ctx, nil, peerString)
 	})
 
 	t.Run("empty peers list", func(t *testing.T) {
 		ctx := context.Background()
-		peers := []client.PeerInfo{}
+		peers := []string{}
 
 		// This should not panic even with nil node since there are no peers to connect to
-		errors := connectToPeers(ctx, nil, peers)
+		err := connectToPeers(ctx, nil, peers)
 
-		if len(errors) != 0 {
-			t.Errorf("Expected no errors with empty peers list, got %d", len(errors))
-		}
+		require.NoError(t, err)
 	})
 
 	t.Run("connect to valid peers", func(t *testing.T) {
@@ -348,28 +350,14 @@ func TestConnectToPeers(t *testing.T) {
 				ID:        "12D3KooWEj8q4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0g1h2i3j4k5l6m",
 			},
 		}
+		peerStrings, errors := PeersIntoBootstrap(peers)
+		if len(errors) > 0 {
+			t.Errorf("Errors translating peers into bootstrap format: %v", errors)
+		}
 
 		// This should not panic and should return connection errors (since these are fake peers)
-		errors := connectToPeers(ctx, testNode, peers)
-
-		// We expect errors since these are fake peer addresses
-		if len(errors) == 0 {
-			t.Errorf("Expected connection errors with fake peers, but got none")
-		}
-
-		// Verify that we got the expected number of errors (one per peer)
-		if len(errors) != len(peers) {
-			t.Errorf("Expected %d connection errors, got %d", len(peers), len(errors))
-		}
-
-		// Verify error messages contain expected information
-		for i, err := range errors {
-			errorMsg := err.Error()
-			expectedIdxStr := fmt.Sprintf("peer %d", i)
-			if !strings.Contains(errorMsg, expectedIdxStr) {
-				t.Errorf("Expected error message to contain '%s', got: %s", expectedIdxStr, errorMsg)
-			}
-		}
+		err = connectToPeers(ctx, testNode, peerStrings)
+		require.Error(t, err)
 	})
 
 	t.Run("connect to empty peers list with real node", func(t *testing.T) {
@@ -383,14 +371,11 @@ func TestConnectToPeers(t *testing.T) {
 		}
 		defer testNode.Close(ctx)
 
-		peers := []client.PeerInfo{}
+		peers := []string{}
 
 		// This should not panic and should return no errors
-		errors := connectToPeers(ctx, testNode, peers)
-
-		if len(errors) != 0 {
-			t.Errorf("Expected no errors with empty peers list, got %d", len(errors))
-		}
+		err = connectToPeers(ctx, testNode, peers)
+		require.NoError(t, err)
 	})
 
 	t.Run("connect multiple nodes to each other", func(t *testing.T) {
@@ -415,61 +400,18 @@ func TestConnectToPeers(t *testing.T) {
 		defer node2.Close(ctx)
 
 		// Get the peer info from node1 to connect node2 to it
-		node1PeerInfo := node1.DB.PeerInfo()
-
-		// Convert node1's peer info to bootstrap format and back to verify our conversion functions
-		bootstrapPeers, errors := PeersIntoBootstrap([]client.PeerInfo{node1PeerInfo})
-		if len(errors) > 0 {
-			t.Fatalf("Failed to convert node1 peer info to bootstrap format: %v", errors)
-		}
-
-		if len(bootstrapPeers) != 1 {
-			t.Fatalf("Expected 1 bootstrap peer, got %d", len(bootstrapPeers))
-		}
-
-		// Convert bootstrap peer back to peer info format
-		convertedPeers, errors := bootstrapIntoPeers(bootstrapPeers)
-		if len(errors) > 0 {
-			t.Fatalf("Failed to convert bootstrap peer back to peer info: %v", errors)
-		}
-
-		if len(convertedPeers) != 1 {
-			t.Fatalf("Expected 1 converted peer, got %d", len(convertedPeers))
-		}
-
-		// Verify the round-trip conversion worked correctly
-		if convertedPeers[0].ID != node1PeerInfo.ID {
-			t.Errorf("Expected converted peer ID %s, got %s", node1PeerInfo.ID, convertedPeers[0].ID)
-		}
+		node1PeerInfo, err := node1.DB.PeerInfo()
+		require.NoError(t, err)
 
 		// Now connect node2 to node1 using our connectToPeers function
-		connectionErrors := connectToPeers(ctx, node2, convertedPeers)
-
-		// We expect this to succeed since both nodes are real and running
-		if len(connectionErrors) > 0 {
-			// Log the errors but don't fail the test immediately - P2P connections can be flaky
-			t.Logf("Connection errors (this may be expected in some environments): %v", connectionErrors)
-		} else {
-			t.Log("Successfully connected node2 to node1!")
-		}
+		err = connectToPeers(ctx, node2, node1PeerInfo)
+		require.NoError(t, err)
 
 		// Test connecting node1 to node2 as well (bidirectional connection)
-		node2PeerInfo := node2.DB.PeerInfo()
-		bootstrapPeers2, errors := PeersIntoBootstrap([]client.PeerInfo{node2PeerInfo})
-		if len(errors) > 0 {
-			t.Fatalf("Failed to convert node2 peer info to bootstrap format: %v", errors)
-		}
+		node2PeerInfo, err := node2.DB.PeerInfo()
+		require.NoError(t, err)
 
-		convertedPeers2, errors := bootstrapIntoPeers(bootstrapPeers2)
-		if len(errors) > 0 {
-			t.Fatalf("Failed to convert node2 bootstrap peer back to peer info: %v", errors)
-		}
-
-		connectionErrors2 := connectToPeers(ctx, node1, convertedPeers2)
-		if len(connectionErrors2) > 0 {
-			t.Logf("Bidirectional connection errors (this may be expected): %v", connectionErrors2)
-		} else {
-			t.Log("Successfully established bidirectional connection between nodes!")
-		}
+		err = connectToPeers(ctx, node1, node2PeerInfo)
+		require.NoError(t, err)
 	})
 }

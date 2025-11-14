@@ -456,15 +456,6 @@ func TestQueryAutoWrapping(t *testing.T) {
 		assert.Equal(t, "TestUser", user.Name)
 	})
 
-	t.Run("Mutation should not be auto-wrapped", func(t *testing.T) {
-		// Mutation should not be wrapped with "query"
-		mutationQuery := `mutation { create_User(input: {name: "AnotherUser"}) { _docID name } }`
-
-		result, err := QuerySingle[map[string]interface{}](ctx, defraNode, mutationQuery)
-		require.NoError(t, err)
-		assert.NotNil(t, result)
-	})
-
 	t.Run("Subscription should not be auto-wrapped", func(t *testing.T) {
 		// Subscription should not be wrapped with "query" (even though we can't test execution)
 		subscriptionQuery := `subscription { User { name } }`
@@ -502,6 +493,15 @@ func TestQueryAutoWrapping(t *testing.T) {
 		assert.Len(t, users, 1)
 		// The name could be any of the users created in previous tests
 		assert.NotEmpty(t, users[0].Name)
+	})
+
+	t.Run("Mutation should not be auto-wrapped", func(t *testing.T) {
+		// Mutation should not be wrapped with "query"
+		mutationQuery := `mutation { create_User(input: {name: "AnotherUser"}) { _docID name } }`
+
+		result, err := QuerySingle[map[string]interface{}](ctx, defraNode, mutationQuery)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
 	})
 }
 

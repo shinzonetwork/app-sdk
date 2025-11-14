@@ -9,15 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/shinzonetwork/app-sdk/pkg/config"
 	"github.com/shinzonetwork/app-sdk/pkg/logger"
 	"github.com/shinzonetwork/app-sdk/pkg/networking"
 	"github.com/sourcenetwork/defradb/acp/identity"
 	"github.com/sourcenetwork/defradb/crypto"
 	"github.com/sourcenetwork/defradb/http"
-	netConfig "github.com/sourcenetwork/defradb/net/config"
 	"github.com/sourcenetwork/defradb/node"
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/sourcenetwork/go-p2p"
 )
 
 var DefaultConfig *config.Config = &config.Config{
@@ -42,7 +42,7 @@ const defaultListenAddress string = "/ip4/127.0.0.1/tcp/9171"
 const keyFileName string = "defra_identity.key"
 
 // Key Management Implementation Notes:
-// 
+//
 // This implementation provides persistent DefraDB identity management by:
 // 1. Extracting private key bytes from generated FullIdentity
 // 2. Storing the raw key bytes as hex-encoded strings in secure files (0600 permissions)
@@ -69,26 +69,26 @@ const keyFileName string = "defra_identity.key"
 // getOrCreateNodeIdentity retrieves an existing node identity from storage or creates a new one
 func getOrCreateNodeIdentity(storePath string) (identity.Identity, error) {
 	keyPath := filepath.Join(storePath, keyFileName)
-	
+
 	// Try to load existing key
 	if _, err := os.Stat(keyPath); err == nil {
 		logger.Sugar.Info("Loading existing DefraDB identity from storage")
 		return loadNodeIdentity(keyPath)
 	}
-	
+
 	// Create new key if none exists
 	logger.Sugar.Info("Generating new DefraDB identity")
 	nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1)
 	if err != nil {
 		return nodeIdentity, fmt.Errorf("failed to generate new identity: %w", err)
 	}
-	
+
 	// Save the new key
 	if err := saveNodeIdentity(keyPath, nodeIdentity); err != nil {
 		logger.Sugar.Warnf("Failed to save identity to storage: %v", err)
 		// Continue with ephemeral key if save fails
 	}
-	
+
 	return nodeIdentity, nil
 }
 
@@ -98,33 +98,33 @@ func saveNodeIdentity(keyPath string, nodeIdentity identity.Identity) error {
 	if err := os.MkdirAll(filepath.Dir(keyPath), 0755); err != nil {
 		return fmt.Errorf("failed to create key directory: %w", err)
 	}
-	
+
 	// Cast to FullIdentity to access private key
 	fullIdentity, ok := nodeIdentity.(identity.FullIdentity)
 	if !ok {
 		return fmt.Errorf("identity is not a FullIdentity, cannot extract private key")
 	}
-	
+
 	// Get the private key from the identity
 	privateKey := fullIdentity.PrivateKey()
 	if privateKey == nil {
 		return fmt.Errorf("failed to get private key from identity")
 	}
-	
+
 	// Get raw key bytes
 	keyBytes := privateKey.Raw()
 	if len(keyBytes) == 0 {
 		return fmt.Errorf("private key has no raw bytes")
 	}
-	
+
 	// Encode as hex string for storage
 	keyHex := hex.EncodeToString(keyBytes)
-	
+
 	// Write to file with restricted permissions
 	if err := os.WriteFile(keyPath, []byte(keyHex), 0600); err != nil {
 		return fmt.Errorf("failed to write key file: %w", err)
 	}
-	
+
 	logger.Sugar.With("path", keyPath).Info("DefraDB identity private key saved to storage")
 	return nil
 }
@@ -137,28 +137,28 @@ func loadNodeIdentity(keyPath string) (identity.Identity, error) {
 		var emptyIdentity identity.Identity
 		return emptyIdentity, fmt.Errorf("failed to read key file: %w", err)
 	}
-	
+
 	// Decode hex string to bytes
 	keyBytes, err := hex.DecodeString(string(keyHex))
 	if err != nil {
 		var emptyIdentity identity.Identity
 		return emptyIdentity, fmt.Errorf("failed to decode key hex: %w", err)
 	}
-	
+
 	// Reconstruct private key from bytes
 	privateKey, err := crypto.PrivateKeyFromBytes(crypto.KeyTypeSecp256k1, keyBytes)
 	if err != nil {
 		var emptyIdentity identity.Identity
 		return emptyIdentity, fmt.Errorf("failed to reconstruct private key: %w", err)
 	}
-	
+
 	// Reconstruct identity from private key
 	fullIdentity, err := identity.FromPrivateKey(privateKey)
 	if err != nil {
 		var emptyIdentity identity.Identity
 		return emptyIdentity, fmt.Errorf("failed to reconstruct identity from private key: %w", err)
 	}
-	
+
 	logger.Sugar.With("path", keyPath).Info("DefraDB identity successfully loaded from storage")
 	return fullIdentity, nil
 }
@@ -171,32 +171,32 @@ func createLibP2PKeyFromIdentity(nodeIdentity identity.Identity) (libp2pcrypto.P
 	if !ok {
 		return nil, fmt.Errorf("identity is not a FullIdentity, cannot extract private key")
 	}
-	
+
 	// Get the private key from the identity
 	privateKey := fullIdentity.PrivateKey()
 	if privateKey == nil {
 		return nil, fmt.Errorf("failed to get private key from identity")
 	}
-	
+
 	// Get raw key bytes
 	keyBytes := privateKey.Raw()
 	if len(keyBytes) == 0 {
 		return nil, fmt.Errorf("private key has no raw bytes")
 	}
-	
+
 	// DefraDB expects Ed25519 keys, but DefraDB identities use secp256k1
 	// We need to derive an Ed25519 key deterministically from the secp256k1 key
 	// Use the secp256k1 key bytes as seed for Ed25519 key generation
 	if len(keyBytes) != 32 {
 		return nil, fmt.Errorf("expected 32-byte secp256k1 key, got %d bytes", len(keyBytes))
 	}
-	
+
 	// Generate Ed25519 key from secp256k1 seed
 	libp2pPrivKey, _, err := libp2pcrypto.GenerateEd25519Key(strings.NewReader(string(keyBytes)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate Ed25519 key from identity seed: %w", err)
 	}
-	
+
 	return libp2pPrivKey, nil
 }
 
@@ -225,7 +225,7 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 		return nil, fmt.Errorf("error creating LibP2P private key from identity: %v", err)
 	}
 
-	// Get raw bytes for DefraDB's netConfig.WithPrivateKey
+	// Get raw bytes for P2P private key configuration (DefraDB 0.20 API TBD)
 	libp2pKeyBytes, err := libp2pPrivKey.Raw()
 	if err != nil {
 		return nil, fmt.Errorf("error getting LibP2P private key bytes: %v", err)
@@ -251,19 +251,26 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 		listenAddress = strings.Replace(listenAddress, "localhost", ipAddress, 1)
 	}
 
-	// Create defra node
+	// Create defra node options
 	options := []node.Option{
 		node.WithDisableAPI(false),
-		node.WithDisableP2P(false),
+		node.WithDisableP2P(false), // Enable P2P networking
 		node.WithStorePath(cfg.DefraDB.Store.Path),
 		http.WithAddress(defraUrl),
 		node.WithNodeIdentity(identity.Identity(nodeIdentity)),
 	}
+	
+	// Add P2P configuration options - DefraDB 0.20 accepts go-p2p NodeOpt as node.Option
+	// This ensures consistent peer ID by using our persistent private key
 	if len(listenAddress) > 0 {
-		options = append(options, netConfig.WithListenAddresses(listenAddress))
+		options = append(options, p2p.WithListenAddresses(listenAddress))
+		logger.Sugar.Infof("P2P Listen Address configured: %s", listenAddress)
 	}
-	// Use the persistent LibP2P private key to ensure consistent peer ID
-	options = append(options, netConfig.WithPrivateKey(libp2pKeyBytes))
+	
+	if len(libp2pKeyBytes) > 0 {
+		options = append(options, p2p.WithPrivateKey(libp2pKeyBytes))
+		logger.Sugar.Info("P2P Private Key configured for consistent peer ID")
+	}
 	defraNode, err := node.New(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create defra node: %v ", err)
@@ -275,17 +282,9 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 	}
 
 	// Connect to bootstrap peers
-	peers, errors := bootstrapIntoPeers(cfg.DefraDB.P2P.BootstrapPeers)
-	for _, err := range errors {
-		logger.Sugar.Errorf("Error translating bootstrapped peers: %v", err)
-	}
-	errors = connectToPeers(ctx, defraNode, peers)
-	if len(errors) > 0 {
-		if len(errors) == len(peers) {
-			defer defraNode.Close(ctx)
-			return nil, fmt.Errorf("failed to connect to any peers, with errors: %v", errors)
-		}
-		logger.Sugar.Errorf("Failed to connect to %d peers, with errors: %v", len(errors), errors)
+	err = connectToPeers(ctx, defraNode, cfg.DefraDB.P2P.BootstrapPeers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to any peers, with error: %w", err)
 	}
 
 	err = schemaApplier.ApplySchema(ctx, defraNode)

@@ -10,9 +10,11 @@ import (
 )
 
 func TestStartDefra(t *testing.T) {
-	testConfig := DefaultConfig
+	// Create a copy of DefaultConfig to avoid modifying the shared instance
+	testConfig := *DefaultConfig
 	testConfig.DefraDB.Url = "127.0.0.1:0"
-	myNode, err := StartDefraInstance(testConfig, &MockSchemaApplierThatSucceeds{})
+	testConfig.DefraDB.Store.Path = t.TempDir() // Use isolated temp directory for each test
+	myNode, err := StartDefraInstance(&testConfig, &MockSchemaApplierThatSucceeds{})
 	require.NoError(t, err)
 	myNode.Close(context.Background())
 }
@@ -25,6 +27,7 @@ func TestStartDefraUsingConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	testConfig.DefraDB.Url = "127.0.0.1:0" // In case we have something else running
+	testConfig.DefraDB.Store.Path = t.TempDir() // Use isolated temp directory for each test
 
 	myNode, err := StartDefraInstance(testConfig, &MockSchemaApplierThatSucceeds{})
 	require.NoError(t, err)

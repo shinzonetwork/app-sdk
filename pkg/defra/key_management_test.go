@@ -279,8 +279,11 @@ func TestPeerIDConsistencyAcrossStartStopRestart(t *testing.T) {
 		require.NotNil(t, defraNode1)
 
 		// Get the peer ID
-		peerInfo := defraNode1.DB.PeerInfo()
-		firstPeerID = peerInfo.ID
+		peerInfo, err := defraNode1.DB.PeerInfo()
+		require.NoError(t, err, "Failed to get peer info")
+		if len(peerInfo) > 0 {
+			firstPeerID = peerInfo[0]
+		}
 		require.NotEmpty(t, firstPeerID, "First node should have a peer ID")
 		
 		fmt.Printf("First startup peer ID: %s\n", firstPeerID)
@@ -300,8 +303,11 @@ func TestPeerIDConsistencyAcrossStartStopRestart(t *testing.T) {
 		require.NotNil(t, defraNode2)
 
 		// Get the peer ID from the restarted node
-		peerInfo := defraNode2.DB.PeerInfo()
-		secondPeerID = peerInfo.ID
+		peerInfo, err := defraNode2.DB.PeerInfo()
+		require.NoError(t, err, "Failed to get peer info")
+		if len(peerInfo) > 0 {
+			secondPeerID = peerInfo[0]
+		}
 		require.NotEmpty(t, secondPeerID, "Second node should have a peer ID")
 		
 		fmt.Printf("Second startup peer ID: %s\n", secondPeerID)
@@ -329,8 +335,11 @@ func TestPeerIDConsistencyAcrossStartStopRestart(t *testing.T) {
 		require.NotNil(t, defraNode3)
 
 		// Get the peer ID from the third startup
-		peerInfo := defraNode3.DB.PeerInfo()
-		thirdPeerID = peerInfo.ID
+		peerInfo, err := defraNode3.DB.PeerInfo()
+		require.NoError(t, err, "Failed to get peer info")
+		if len(peerInfo) > 0 {
+			thirdPeerID = peerInfo[0]
+		}
 		require.NotEmpty(t, thirdPeerID, "Third node should have a peer ID")
 		
 		fmt.Printf("Third startup peer ID: %s\n", thirdPeerID)
@@ -410,8 +419,11 @@ func TestPeerIDConsistencyWithHardcodedIdentity(t *testing.T) {
 		require.NotNil(t, defraNode1)
 
 		// Get the peer ID
-		peerInfo := defraNode1.DB.PeerInfo()
-		firstPeerID = peerInfo.ID
+		peerInfo, err := defraNode1.DB.PeerInfo()
+		require.NoError(t, err, "Failed to get peer info")
+		if len(peerInfo) > 0 {
+			firstPeerID = peerInfo[0]
+		}
 		require.NotEmpty(t, firstPeerID, "First node should have a peer ID")
 		
 		fmt.Printf("First startup peer ID (hardcoded): %s\n", firstPeerID)
@@ -431,8 +443,11 @@ func TestPeerIDConsistencyWithHardcodedIdentity(t *testing.T) {
 		require.NotNil(t, defraNode2)
 
 		// Get the peer ID from the restarted node
-		peerInfo := defraNode2.DB.PeerInfo()
-		secondPeerID = peerInfo.ID
+		peerInfo, err := defraNode2.DB.PeerInfo()
+		require.NoError(t, err, "Failed to get peer info")
+		if len(peerInfo) > 0 {
+			secondPeerID = peerInfo[0]
+		}
 		require.NotEmpty(t, secondPeerID, "Second node should have a peer ID")
 		
 		fmt.Printf("Second startup peer ID (hardcoded): %s\n", secondPeerID)
@@ -460,8 +475,11 @@ func TestPeerIDConsistencyWithHardcodedIdentity(t *testing.T) {
 		require.NotNil(t, defraNode3)
 
 		// Get the peer ID from the third startup
-		peerInfo := defraNode3.DB.PeerInfo()
-		thirdPeerID = peerInfo.ID
+		peerInfo, err := defraNode3.DB.PeerInfo()
+		require.NoError(t, err, "Failed to get peer info")
+		if len(peerInfo) > 0 {
+			thirdPeerID = peerInfo[0]
+		}
 		require.NotEmpty(t, thirdPeerID, "Third node should have a peer ID")
 		
 		fmt.Printf("Third startup peer ID (hardcoded): %s\n", thirdPeerID)

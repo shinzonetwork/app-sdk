@@ -66,7 +66,9 @@ func TestAttemptToReCreateAnExistingDocReceivedFromAnotherNode(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Quinn", user.Name)
 
-	err = firstDefra.DB.SetReplicator(t.Context(), secondDefra.DB.PeerInfo(), "User")
+	peerInfo, err := secondDefra.DB.PeerInfo()
+	require.NoError(t, err)
+	err = firstDefra.DB.SetReplicator(t.Context(), peerInfo, "User")
 	require.NoError(t, err)
 
 	time.Sleep(3 * time.Second) // Allow a moment for data to sync
