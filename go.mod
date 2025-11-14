@@ -6,6 +6,7 @@ toolchain go1.24.7
 
 require (
 	github.com/joho/godotenv v1.5.1
+	github.com/libp2p/go-libp2p v0.43.0
 	github.com/shinzonetwork/shinzo-host-client v0.0.0-20251105152353-1066c5154025
 	github.com/shinzonetwork/view-creator v0.0.0-20250708160313-7af9785b76ec
 	github.com/sourcenetwork/defradb v0.20.0
@@ -221,7 +222,6 @@ require (
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-cidranger v1.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.3.0 // indirect
-	github.com/libp2p/go-libp2p v0.43.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.4.1 // indirect
 	github.com/libp2p/go-libp2p-kad-dht v0.35.0 // indirect
 	github.com/libp2p/go-libp2p-kbucket v0.8.0 // indirect
