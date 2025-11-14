@@ -1,6 +1,8 @@
 module github.com/shinzonetwork/big-peer
 
-go 1.25.1
+go 1.25
+
+require github.com/shinzonetwork/app-sdk v0.0.0-20251008150512-a3fa3efe5a39
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.3-20241127180247-a33202765966.1 // indirect
@@ -306,7 +308,6 @@ require (
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
-	github.com/shinzonetwork/app-sdk v0.0.0-20251008150512-a3fa3efe5a39 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/sourcenetwork/acp_core v0.4.1 // indirect
