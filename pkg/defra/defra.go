@@ -114,7 +114,7 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 
 	err = defraNode.DB.AddP2PCollections(ctx, collectionsOfInterest...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to add collections of interes %v: %w", collectionsOfInterest, err)
+		return nil, fmt.Errorf("failed to add collections of interest %v: %w", collectionsOfInterest, err)
 	}
 
 	config.SetAppConfig(cfg)

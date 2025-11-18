@@ -28,8 +28,7 @@ type AttestationRecord struct {
 
 func AddAttestationRecordCollection(ctx context.Context, defraNode *node.Node, associatedViewName string) error {
 	collectionSDL := getAttestationRecordSDL(associatedViewName)
-	schemaApplier := defra.NewSchemaApplierFromProvidedSchema(collectionSDL)
-	err := schemaApplier.ApplySchema(ctx, defraNode)
+	_, err := defraNode.DB.AddSchema(ctx, collectionSDL)
 	if err != nil {
 		return fmt.Errorf("Error adding attestation record schema %s: %w", collectionSDL, err)
 	}
