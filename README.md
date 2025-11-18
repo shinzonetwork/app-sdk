@@ -63,3 +63,17 @@ Writing data to your defra instance is made simple using the `PostMutation` func
 This function will execute a GraphQL mutation and return the result unmarshaled into your specified struct type.
 
 For an example on how you can use this query to create complex objects (with relations to other objects), checkout `pkg/defra/complexObjectWriteAndQuery_test.go`.
+
+### Attestations
+
+Shinzo Hosts provide "attestation records" from the Indexers; these are useful for validating the correctness of the data your application is consuming. Using attestation records is optional as it requires extra data be sent to the application client device(s) and will slightly increase query response time, but is recommended for any applications dealing with medium to high value transactions.
+
+In order to receive the AttestationRecords for a given View, use the `attestation.AddAttestationRecordCollection` method exposed in the attestation package. e.g.
+
+`err := attestation.AddAttestationRecordCollection(ctx, myDefraNode, myViewNameString)`
+
+You can also fetch all the attestation records for a given document with `attestation.GetAttestationRecords` method exposed in the attestation package.
+
+In future iterations, app-sdk will also allow you to configure your queries to automatically filter with a minimum attestation threshhold (coming soon!), dramatically simplifying the attestation query flow.
+
+For more context on attestation records, please see [this ADR](https://github.com/shinzonetwork/shinzo-host-client/blob/main/adr/02-AttestationRecords.md).

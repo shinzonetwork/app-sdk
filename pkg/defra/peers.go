@@ -9,7 +9,7 @@ import (
 	"github.com/sourcenetwork/defradb/node"
 )
 
-func bootstrapIntoPeers(configuredBootstrapPeers []string) ([]client.PeerInfo, []error) {
+func BootstrapIntoPeers(configuredBootstrapPeers []string) ([]client.PeerInfo, []error) {
 	peers := []client.PeerInfo{}
 	errors := []error{}
 
@@ -56,15 +56,15 @@ func PeersIntoBootstrap(peers []client.PeerInfo) ([]string, []error) {
 	return bootstrapPeers, errors
 }
 
-func connectToPeers(ctx context.Context, defraNode *node.Node, peers []client.PeerInfo) []error {
-	errors := []error{}
-
-	for i, peer := range peers {
-		err := defraNode.DB.Connect(ctx, peer)
-		if err != nil {
-			errors = append(errors, fmt.Errorf("error connecting to peer %d with info %v: %v", i, peer, err))
-		}
+func connectToPeers(ctx context.Context, defraNode *node.Node, peers []string) error {
+	if len(peers) == 0 {
+		return nil
 	}
 
-	return errors
+	err := defraNode.DB.Connect(ctx, peers)
+	if err != nil {
+		return fmt.Errorf("error connecting to peer: %v", err)
+	}
+
+	return nil
 }
