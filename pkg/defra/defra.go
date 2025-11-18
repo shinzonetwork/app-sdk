@@ -37,6 +37,22 @@ var DefaultConfig *config.Config = &config.Config{
 var requiredPeers []string = []string{} // Here, we can add some "big peers" to give nodes a starting place when building their peer network
 const defaultListenAddress string = "/ip4/127.0.0.1/tcp/9171"
 
+// appConfig is used to store the config for this app
+var appConfig *config.Config
+
+func setAppConfig(cfg *config.Config) {
+	appConfig = cfg
+}
+
+// GetConfiguredAttestationThreshold returns the minimum attestations threshold from the app config.
+// Returns 0 if no app config is set or threshold is not configured.
+func GetConfiguredAttestationThreshold() uint {
+	if appConfig == nil {
+		return 0
+	}
+	return appConfig.GetMinimumAttestations()
+}
+
 func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collectionsOfInterest ...string) (*node.Node, error) {
 	ctx := context.Background()
 
@@ -116,6 +132,8 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 	if err != nil {
 		return nil, fmt.Errorf("failed to add collections of interes %v: %w", collectionsOfInterest, err)
 	}
+
+	setAppConfig(cfg)
 
 	return defraNode, nil
 }

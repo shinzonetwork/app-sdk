@@ -47,7 +47,7 @@ func filterMinimumIndexerAttestations[T any](ctx context.Context, defraNode *nod
 		}
 	}`, viewName, docIdQueryParam)
 
-	attestationRecords, err := defra.QueryArray[AttestationRecord](ctx, defraNode, query, 0)
+	attestationRecords, err := defra.QueryArray[AttestationRecord](ctx, defraNode, query)
 	if err != nil {
 		return nil, fmt.Errorf("error querying attestation records: %w", err)
 	}
@@ -207,4 +207,244 @@ func extractCollectionNameFromQuery(query string) (string, error) {
 	}
 
 	return result, nil
+}
+
+// hasLimitParameter checks if a GraphQL query contains a limit parameter.
+// It looks for "limit:" in the query string (case-insensitive).
+func hasLimitParameter(query string) bool {
+	queryLower := strings.ToLower(query)
+	// Look for "limit:" pattern, ensuring it's not part of another word
+	return strings.Contains(queryLower, "limit:")
+}
+
+// extractLimitValue extracts the limit value from a GraphQL query.
+// Returns the limit value and true if found, or 0 and false if not found.
+func extractLimitValue(query string) (int, bool) {
+	queryLower := strings.ToLower(query)
+	limitIdx := strings.Index(queryLower, "limit:")
+	if limitIdx == -1 {
+		return 0, false
+	}
+
+	// Find the value after "limit:"
+	start := limitIdx + len("limit:")
+	// Skip whitespace
+	for start < len(query) && (query[start] == ' ' || query[start] == '\t' || query[start] == '\n' || query[start] == '\r') {
+		start++
+	}
+
+	// Extract the number
+	var limit int
+	end := start
+	for end < len(query) && query[end] >= '0' && query[end] <= '9' {
+		end++
+	}
+
+	if end > start {
+		_, err := fmt.Sscanf(query[start:end], "%d", &limit)
+		if err == nil {
+			return limit, true
+		}
+	}
+
+	return 0, false
+}
+
+// incrementLimitInQuery increments the limit parameter in a GraphQL query by the specified amount.
+// If no limit exists, it adds one. Returns the modified query.
+func incrementLimitInQuery(query string, increment int) string {
+	limitIdx := strings.Index(strings.ToLower(query), "limit:")
+	if limitIdx == -1 {
+		// No limit found, we need to add one
+		// Find the collection name and add limit after it, before the opening brace of fields
+		return addLimitToQuery(query, increment)
+	}
+
+	// Extract the current limit value
+	currentLimit, found := extractLimitValue(query)
+	if !found {
+		// Limit keyword exists but value couldn't be parsed, try to add it
+		return addLimitToQuery(query, increment)
+	}
+
+	newLimit := currentLimit + increment
+	// Replace the old limit value with the new one
+	start := limitIdx + len("limit:")
+	// Skip whitespace
+	for start < len(query) && (query[start] == ' ' || query[start] == '\t' || query[start] == '\n' || query[start] == '\r') {
+		start++
+	}
+
+	// Find the end of the number
+	end := start
+	for end < len(query) && query[end] >= '0' && query[end] <= '9' {
+		end++
+	}
+
+	if end > start {
+		// Replace the number
+		return query[:start] + fmt.Sprintf("%d", newLimit) + query[end:]
+	}
+
+	return query
+}
+
+// addLimitToQuery adds a limit parameter to a GraphQL query.
+// It finds the collection name and adds "limit: N" before the opening brace of the field selection.
+func addLimitToQuery(query string, limit int) string {
+	// Find the collection name position
+	viewName, err := extractCollectionNameFromQuery(query)
+	if err != nil {
+		return query // Can't parse, return original
+	}
+
+	// Find the position after the collection name
+	queryLower := strings.ToLower(query)
+	viewNameLower := strings.ToLower(viewName)
+	viewNameIdx := strings.Index(queryLower, viewNameLower)
+	if viewNameIdx == -1 {
+		return query
+	}
+
+	// Find the position after the collection name
+	afterViewName := viewNameIdx + len(viewName)
+	// Skip whitespace
+	for afterViewName < len(query) && (query[afterViewName] == ' ' || query[afterViewName] == '\t' || query[afterViewName] == '\n' || query[afterViewName] == '\r') {
+		afterViewName++
+	}
+
+	// Check if there's already a parenthesis (for filter, etc.)
+	if afterViewName < len(query) && query[afterViewName] == '(' {
+		// Find the closing parenthesis
+		parenDepth := 1
+		pos := afterViewName + 1
+		for pos < len(query) && parenDepth > 0 {
+			if query[pos] == '(' {
+				parenDepth++
+			} else if query[pos] == ')' {
+				parenDepth--
+			}
+			pos++
+		}
+		// Insert limit before the closing parenthesis
+		if parenDepth == 0 {
+			// Check if there are already parameters, add comma if needed
+			beforeParen := strings.TrimSpace(query[afterViewName+1 : pos-1])
+			commaNeeded := len(beforeParen) > 0
+			if commaNeeded {
+				return query[:pos-1] + fmt.Sprintf(", limit: %d", limit) + query[pos-1:]
+			}
+			return query[:pos-1] + fmt.Sprintf("limit: %d", limit) + query[pos-1:]
+		}
+	} else {
+		// No parenthesis, add one with limit
+		return query[:afterViewName] + fmt.Sprintf("(limit: %d)", limit) + query[afterViewName:]
+	}
+
+	return query
+}
+
+// QueryArrayWithAttestationFilter executes a GraphQL query and filters results based on minimum attestation threshold.
+// T must be a struct type that has a DocID field of type string.
+func QueryArrayWithAttestationFilter[T any](ctx context.Context, defraNode *node.Node, query string, minimumAttestations uint) ([]T, error) {
+	results, err := defra.QueryArray[T](ctx, defraNode, query)
+	if err != nil {
+		return nil, err
+	}
+
+	return filterMinimumIndexerAttestations(ctx, defraNode, results, minimumAttestations, query)
+}
+
+// QueryArrayWithConfiguredAttestationFilter executes a GraphQL query and filters results using the configured attestation threshold.
+// T must be a struct type that has a DocID field of type string.
+func QueryArrayWithConfiguredAttestationFilter[T any](ctx context.Context, defraNode *node.Node, query string) ([]T, error) {
+	minimumAttestations := defra.GetConfiguredAttestationThreshold()
+	return QueryArrayWithAttestationFilter[T](ctx, defraNode, query, minimumAttestations)
+}
+
+// QuerySingleWithAttestationFilter executes a GraphQL query and returns a single result that meets the minimum attestation threshold.
+// T must be a struct type that has a DocID field of type string.
+// This function uses QueryArray under the hood and returns the first result that passes the filter.
+// If no results meet the threshold, it will increment the limit and retry until a result is found or the entire collection is queried.
+func QuerySingleWithAttestationFilter[T any](ctx context.Context, defraNode *node.Node, query string, minimumAttestations uint) (T, error) {
+	var zero T
+
+	// Convert query to use QueryArray by ensuring it returns an array
+	// Use QueryArray to get multiple results
+	results, err := defra.QueryArray[T](ctx, defraNode, query)
+	if err != nil {
+		return zero, err
+	}
+
+	// Filter results
+	filtered, err := filterMinimumIndexerAttestations(ctx, defraNode, results, minimumAttestations, query)
+	if err != nil {
+		return zero, err
+	}
+
+	// If we have filtered results, return the first one
+	if len(filtered) > 0 {
+		return filtered[0], nil
+	}
+
+	// No results after filtering - check if query has limit
+	hasLimit := hasLimitParameter(query)
+	if !hasLimit {
+		// No limit means we've searched the entire collection
+		return zero, fmt.Errorf("no results found that meet the minimum attestation threshold of %d", minimumAttestations)
+	}
+
+	// Has limit - increment and retry
+	currentLimit, found := extractLimitValue(query)
+	if !found {
+		currentLimit = 10 // Default if we can't parse
+	}
+
+	currentQuery := query
+
+	// Try incrementing limit until we find a result or exhaust the collection
+	for {
+		// Increment limit by 10
+		currentQuery = incrementLimitInQuery(currentQuery, 10)
+		currentLimit += 10
+
+		results, err := defra.QueryArray[T](ctx, defraNode, currentQuery)
+		if err != nil {
+			return zero, err
+		}
+
+		// If we got fewer results than the limit, we've queried everything
+		if len(results) < currentLimit {
+			// Filter and check if we have any results
+			filtered, err := filterMinimumIndexerAttestations(ctx, defraNode, results, minimumAttestations, currentQuery)
+			if err != nil {
+				return zero, err
+			}
+			if len(filtered) > 0 {
+				return filtered[0], nil
+			}
+			// We've queried everything and nothing meets the threshold
+			return zero, fmt.Errorf("no results found that meet the minimum attestation threshold of %d after querying entire collection", minimumAttestations)
+		}
+
+		// Filter results
+		filtered, err := filterMinimumIndexerAttestations(ctx, defraNode, results, minimumAttestations, currentQuery)
+		if err != nil {
+			return zero, err
+		}
+
+		// If we have filtered results, return the first one
+		if len(filtered) > 0 {
+			return filtered[0], nil
+		}
+
+		// Continue loop with incremented limit
+	}
+}
+
+// QuerySingleWithConfiguredAttestationFilter executes a GraphQL query and returns a single result using the configured attestation threshold.
+// T must be a struct type that has a DocID field of type string.
+func QuerySingleWithConfiguredAttestationFilter[T any](ctx context.Context, defraNode *node.Node, query string) (T, error) {
+	minimumAttestations := defra.GetConfiguredAttestationThreshold()
+	return QuerySingleWithAttestationFilter[T](ctx, defraNode, query, minimumAttestations)
 }
