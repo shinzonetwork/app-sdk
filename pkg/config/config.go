@@ -40,6 +40,22 @@ type LoggerConfig struct {
 	Development bool `yaml:"development"`
 }
 
+// appConfig is used to store the config for this app
+var appConfig *Config
+
+func SetAppConfig(cfg *Config) {
+	appConfig = cfg
+}
+
+// GetConfiguredAttestationThreshold returns the minimum attestations threshold from the app config.
+// Returns 0 if no app config is set or threshold is not configured.
+func GetConfiguredAttestationThreshold() uint {
+	if appConfig == nil {
+		return 0
+	}
+	return appConfig.GetMinimumAttestations()
+}
+
 // LoadConfig loads configuration from a YAML file and environment variables
 func LoadConfig(path string) (*Config, error) {
 	// Load .env file if it exists
@@ -74,7 +90,7 @@ func (c *Config) GetMinimumAttestations() uint {
 	if c == nil || c.Shinzo.MinimumAttestations == "" {
 		return 0
 	}
-	
+
 	var threshold uint
 	_, err := fmt.Sscanf(c.Shinzo.MinimumAttestations, "%d", &threshold)
 	if err != nil {

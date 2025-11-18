@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/shinzonetwork/app-sdk/pkg/config"
 	"github.com/shinzonetwork/app-sdk/pkg/defra"
 	"github.com/sourcenetwork/defradb/node"
 )
@@ -358,7 +359,7 @@ func QueryArrayWithAttestationFilter[T any](ctx context.Context, defraNode *node
 // QueryArrayWithConfiguredAttestationFilter executes a GraphQL query and filters results using the configured attestation threshold.
 // T must be a struct type that has a DocID field of type string.
 func QueryArrayWithConfiguredAttestationFilter[T any](ctx context.Context, defraNode *node.Node, query string) ([]T, error) {
-	minimumAttestations := defra.GetConfiguredAttestationThreshold()
+	minimumAttestations := config.GetConfiguredAttestationThreshold()
 	return QueryArrayWithAttestationFilter[T](ctx, defraNode, query, minimumAttestations)
 }
 
@@ -445,6 +446,6 @@ func QuerySingleWithAttestationFilter[T any](ctx context.Context, defraNode *nod
 // QuerySingleWithConfiguredAttestationFilter executes a GraphQL query and returns a single result using the configured attestation threshold.
 // T must be a struct type that has a DocID field of type string.
 func QuerySingleWithConfiguredAttestationFilter[T any](ctx context.Context, defraNode *node.Node, query string) (T, error) {
-	minimumAttestations := defra.GetConfiguredAttestationThreshold()
+	minimumAttestations := config.GetConfiguredAttestationThreshold()
 	return QuerySingleWithAttestationFilter[T](ctx, defraNode, query, minimumAttestations)
 }
