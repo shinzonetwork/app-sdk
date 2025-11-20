@@ -3,6 +3,7 @@ package experiments
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,20 +47,53 @@ func TestSyncFromMultipleWriters(t *testing.T) {
 	}
 
 	// Write data from each writer
-	for _, writer := range writerDefras {
+	type UserResult struct {
+		Name string `json:"name"`
+	}
+
+	type UserWithDocID struct {
+		DocID string `json:"_docID"`
+		Name  string `json:"name"`
+	}
+
+	for i, writer := range writerDefras {
 		mutation := `mutation {
 			create_User(input: { name: "Quinn" }) {
 				name
 			}
 		}`
 
-		type UserResult struct {
-			Name string `json:"name"`
-		}
-
 		result, err := defra.PostMutation[UserResult](ctx, writer, mutation)
-		require.NoError(t, err)
+		if err != nil && strings.Contains(err.Error(), "already exists") {
+			t.Logf("Writer %d: Document already exists, signing existing document", i+1)
+			
+			// Document exists, get its ID and sign it with empty update
+			query := `query { 
+				User(limit: 1) { 
+					_docID 
+					name 
+				} 
+			}`
+			existingDoc, queryErr := defra.QuerySingle[UserWithDocID](ctx, writer, query)
+			require.NoError(t, queryErr, "Failed to query existing document for writer %d", i+1)
+			require.Equal(t, "Quinn", existingDoc.Name, "Existing document has wrong name for writer %d", i+1)
+			
+			// Sign with empty update mutation
+			signMutation := fmt.Sprintf(`mutation {
+				update_User(docID: "%s", input: { }) {
+					name
+				}
+			}`, existingDoc.DocID)
+			
+			signResult, signErr := defra.PostMutation[UserResult](ctx, writer, signMutation)
+			require.NoError(t, signErr, "Failed to sign existing document for writer %d", i+1)
+			require.Equal(t, "Quinn", signResult.Name, "Sign result has wrong name for writer %d", i+1)
+			t.Logf("Writer %d: Successfully signed existing document", i+1)
+			continue
+		}
+		require.NoError(t, err, "Unexpected error for writer %d", i+1)
 		require.Equal(t, "Quinn", result.Name)
+		t.Logf("Writer %d: Successfully created new document", i+1)
 	}
 
 	// Wait for sync and verify reader has all data

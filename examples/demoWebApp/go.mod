@@ -1,17 +1,10 @@
-module github.com/shinzonetwork/app-sdk
+module github.com/shinzonetwork/demo-web-app
 
 go 1.25
 
 require (
-	github.com/joho/godotenv v1.5.1
-	github.com/libp2p/go-libp2p v0.43.0
-	github.com/shinzonetwork/shinzo-host-client v0.0.0-20251105152353-1066c5154025
-	github.com/shinzonetwork/view-creator v0.0.0-20251113191457-a28acb09bf07
+	github.com/shinzonetwork/app-sdk v0.0.0-20251114204250-56f91c14826a
 	github.com/sourcenetwork/defradb v0.20.0
-	github.com/sourcenetwork/go-p2p v0.1.4
-	github.com/stretchr/testify v1.11.1
-	go.uber.org/zap v1.27.0
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -202,6 +195,7 @@ require (
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jmhodges/levigo v1.0.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kilic/bls12-381 v0.1.1-0.20210503002446-7b7597926c69 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
@@ -220,6 +214,7 @@ require (
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-cidranger v1.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.3.0 // indirect
+	github.com/libp2p/go-libp2p v0.43.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.4.1 // indirect
 	github.com/libp2p/go-libp2p-kad-dht v0.35.0 // indirect
 	github.com/libp2p/go-libp2p-kbucket v0.8.0 // indirect
@@ -307,6 +302,7 @@ require (
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
+	github.com/shinzonetwork/view-creator v0.0.0-20251113191457-a28acb09bf07 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/sourcenetwork/acp_core v0.4.1 // indirect
@@ -318,6 +314,7 @@ require (
 	github.com/sourcenetwork/corekv/namespace v0.2.4 // indirect
 	github.com/sourcenetwork/corelog v0.0.8 // indirect
 	github.com/sourcenetwork/go-libp2p-pubsub-rpc v0.0.14 // indirect
+	github.com/sourcenetwork/go-p2p v0.1.4 // indirect
 	github.com/sourcenetwork/goji v0.0.8 // indirect
 	github.com/sourcenetwork/graphql-go v0.7.10-0.20241003221550-224346887b4a // indirect
 	github.com/sourcenetwork/immutable v0.3.0 // indirect
@@ -333,6 +330,7 @@ require (
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/spf13/viper v1.20.1 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tendermint/go-amino v0.16.0 // indirect
@@ -371,6 +369,7 @@ require (
 	go.uber.org/fx v1.24.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/arch v0.6.0 // indirect
 	golang.org/x/crypto v0.42.0 // indirect
@@ -393,6 +392,7 @@ require (
 	google.golang.org/grpc v1.75.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.1 // indirect
 	k8s.io/apimachinery v0.32.3 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect

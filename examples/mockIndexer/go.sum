@@ -2253,10 +2253,8 @@ github.com/segmentio/asm v1.2.0/go.mod h1:BqMnlJP91P8d+4ibuonYZw9mfnzI9HfxselHZr
 github.com/sergi/go-diff v1.0.0/go.mod h1:0CfEIISq7TuYL3j771MWULgwwjU+GofnZX9QAmXWZgo=
 github.com/sergi/go-diff v1.1.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
 github.com/shazow/go-diff v0.0.0-20160112020656-b6b7b6733b8c/go.mod h1:/PevMnwAxekIXwN8qQyfc5gl2NlkB3CQlkizAbOkeBs=
-github.com/shinzonetwork/shinzo-host-client v0.0.0-20251105152353-1066c5154025 h1:2YBxxrzTrtELwUsJdG/Lz7fnk2uhLs9bpOyWJp8GE7k=
-github.com/shinzonetwork/shinzo-host-client v0.0.0-20251105152353-1066c5154025/go.mod h1:EilGqGNR1uekrP7+PkWe/2H617etgLh8iuzsB6ODo3c=
-github.com/shinzonetwork/view-creator v0.0.0-20251113191457-a28acb09bf07 h1:EdzzvXBsNjd5nrDhFa48MgoVfu1LICUnKLW4L/dFcXw=
-github.com/shinzonetwork/view-creator v0.0.0-20251113191457-a28acb09bf07/go.mod h1:ZsdEDqYW0XIhLuS07T3uOShvbTL52HiPztqs4rHYW6o=
+github.com/shinzonetwork/app-sdk v0.0.0-20251114204250-56f91c14826a h1:EiuOuTc+0Bx3NlyHiZXcgKrMSNS8AWK/VdLi7PYcahg=
+github.com/shinzonetwork/app-sdk v0.0.0-20251114204250-56f91c14826a/go.mod h1:C/Z3natCUpjLY0SX96qHBDSgK+rhYX4eqm7a3/srM14=
 github.com/shirou/gopsutil/v3 v3.22.6/go.mod h1:EdIubSnZhbAvBS1yJ7Xi+AShB/hxwLHOMz4MCYz7yMs=
 github.com/shurcooL/component v0.0.0-20170202220835-f88ec8f54cc4/go.mod h1:XhFIlyj5a1fBNx5aJTbKoIq0mNaPvOagO+HjB3EtxrY=
 github.com/shurcooL/events v0.0.0-20181021180414-410e4ca65f48/go.mod h1:5u70Mqkb5O5cxEA8nxTsgrgLehJeAw6Oc4Ab1c/P1HM=
