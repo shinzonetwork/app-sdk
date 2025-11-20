@@ -30,5 +30,69 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
 
-    - name: Run tests
-      run: go test ./...
+    - name: Run tests (excluding experiments)
+      run: go test $(go list ./... | grep -v '/experiments')
+
+  test-experiments:
+    runs-on: ubuntu-latest
+    # Only run experiments tests if go.mod changed (will check if defra dependency changed)
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history to compare changes
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+
+    - name: Cache Go build
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Check if defra dependency changed
+      id: check-defra
+      run: |
+        DEFRA_CHANGED=false
+        
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          # For PRs, fetch base branch and compare
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          
+          # Fetch the base branch to ensure we have it
+          git fetch origin "$BASE_REF" --depth=1 || true
+          
+          # Check if go.mod changed at all
+          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null | grep -q "^go.mod$"; then
+            # Check if defra line specifically changed
+            if git diff "$BASE_SHA" "$HEAD_SHA" -- go.mod 2>/dev/null | grep -q "^[+-].*github.com/sourcenetwork/defradb"; then
+              DEFRA_CHANGED=true
+            fi
+          fi
+        else
+          # For pushes, compare against previous commit
+          if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            if git diff --name-only "${{ github.event.before }}" "${{ github.event.after }}" 2>/dev/null | grep -q "^go.mod$"; then
+              if git diff "${{ github.event.before }}" "${{ github.event.after }}" -- go.mod 2>/dev/null | grep -q "^[+-].*github.com/sourcenetwork/defradb"; then
+                DEFRA_CHANGED=true
+              fi
+            fi
+          fi
+        fi
+        
+        echo "defra_changed=$DEFRA_CHANGED" >> $GITHUB_OUTPUT
+        echo "Defra dependency changed: $DEFRA_CHANGED"
+
+    - name: Run experiments tests
+      if: steps.check-defra.outputs.defra_changed == 'true'
+      run: go test ./experiments/...
