@@ -14,7 +14,7 @@ import (
 func getAttestationRecordSDL(viewName string) string {
 	primitiveSchema := schema.GetSchema()
 	primitives, err := extractSchemaTypes(primitiveSchema)
-	if err != nil {
+	if err == nil {
 		for _, primitive := range primitives {
 			if viewName == primitive { // For our primitive attestation records, we use a condensed schema
 				return fmt.Sprintf(`type AttestationRecord_%s { 
