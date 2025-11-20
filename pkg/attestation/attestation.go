@@ -3,15 +3,29 @@ package attestation
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/shinzonetwork/app-sdk/pkg/defra"
+	"github.com/shinzonetwork/indexer/pkg/schema"
 	"github.com/sourcenetwork/defradb/node"
 )
 
 func getAttestationRecordSDL(viewName string) string {
-	// Omitting the IndexerSignature schema (even if included in schema/schema.graphql) causes an error because those objects are included in the AttestationRecord
-	// If either AttestationRecord or IndexerSignature do not have unique names, we will get an error when trying to apply them as a schema (collection already exists error)
+	primitiveSchema := schema.GetSchema()
+	primitives, err := extractSchemaTypes(primitiveSchema)
+	if err != nil {
+		for _, primitive := range primitives {
+			if viewName == primitive { // For our primitive attestation records, we use a condensed schema
+				return fmt.Sprintf(`type AttestationRecord_%s { 
+					attested_doc: String
+					CIDs: [String]
+				}`, viewName)
+			}
+		}
+	}
+
+	// If either AttestationRecord does not have unique name, we will get an error when trying to the schema (collection already exists error)
 	// We want a separate collection of AttestationRecords for each View so that app clients don't receive all AttestationRecords, only those that are relevant to the collections/Views they care about - we can just append the View names as those must also be unique
 	return fmt.Sprintf(`type AttestationRecord_%s {
 		attested_doc: String
@@ -65,4 +79,25 @@ func GetAttestationRecords(ctx context.Context, defraNode *node.Node, associated
 		return nil, fmt.Errorf("No attestation records found with query: %s", query)
 	}
 	return records, nil
+}
+
+// extractSchemaTypes extracts all type names from a GraphQL SDL schema
+func extractSchemaTypes(schema string) ([]string, error) {
+	// Find all type definitions: type TypeName { ... }
+	re := regexp.MustCompile(`type\s+(\w+)\s*@?[^{]*\{`)
+	matches := re.FindAllStringSubmatch(schema, -1)
+
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no type definitions found in schema")
+	}
+
+	types := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) > 1 {
+			typeName := strings.TrimSpace(match[1])
+			types = append(types, typeName)
+		}
+	}
+
+	return types, nil
 }
