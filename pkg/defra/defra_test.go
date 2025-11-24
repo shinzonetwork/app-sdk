@@ -14,6 +14,7 @@ func TestStartDefra(t *testing.T) {
 	testConfig := *DefaultConfig
 	testConfig.DefraDB.Url = "127.0.0.1:0"
 	testConfig.DefraDB.Store.Path = t.TempDir() // Use isolated temp directory for each test
+	testConfig.DefraDB.KeyringSecret = "testSecret"
 	myNode, err := StartDefraInstance(&testConfig, &MockSchemaApplierThatSucceeds{})
 	require.NoError(t, err)
 	myNode.Close(context.Background())
