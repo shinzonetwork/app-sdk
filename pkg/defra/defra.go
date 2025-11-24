@@ -344,5 +344,6 @@ func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaAp
 	cfg.DefraDB.Store.Path = t.TempDir()
 	cfg.DefraDB.Url = defraUrl
 	cfg.DefraDB.P2P.ListenAddr = listenAddress
+	cfg.DefraDB.KeyringSecret = "testSecret"
 	return StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
 }
