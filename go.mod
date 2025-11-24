@@ -1,10 +1,11 @@
 module github.com/shinzonetwork/app-sdk
 
-go 1.25
+go 1.25.4
 
 require (
 	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.43.0
+	github.com/shinzonetwork/indexer v0.1.1-0.20251120164521-e7d20c7b0344
 	github.com/shinzonetwork/shinzo-host-client v0.0.0-20251105152353-1066c5154025
 	github.com/shinzonetwork/view-creator v0.0.0-20251113191457-a28acb09bf07
 	github.com/sourcenetwork/defradb v0.20.0
@@ -143,7 +144,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
+	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/flatbuffers v25.9.23+incompatible // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
