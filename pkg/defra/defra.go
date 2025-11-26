@@ -1,8 +1,9 @@
 package defra
 
 import (
+	"bytes"
 	"context"
-	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"github.com/sourcenetwork/defradb/acp/identity"
 	"github.com/sourcenetwork/defradb/crypto"
 	"github.com/sourcenetwork/defradb/http"
+	"github.com/sourcenetwork/defradb/keyring"
 	"github.com/sourcenetwork/defradb/node"
 	"github.com/sourcenetwork/go-p2p"
 )
@@ -39,66 +41,91 @@ var DefaultConfig *config.Config = &config.Config{
 
 var requiredPeers []string = []string{} // Here, we can add some "big peers" to give nodes a starting place when building their peer network
 const defaultListenAddress string = "/ip4/127.0.0.1/tcp/9171"
-const keyFileName string = "defra_identity.key"
+const nodeIdentityKeyName string = "node-identity-key"
 
 // Key Management Implementation Notes:
 //
-// This implementation provides persistent DefraDB identity management by:
+// This implementation provides persistent DefraDB identity management using the keyring:
 // 1. Extracting private key bytes from generated FullIdentity
-// 2. Storing the raw key bytes as hex-encoded strings in secure files (0600 permissions)
+// 2. Storing the raw key bytes in encrypted keyring storage (file-based keyring)
 // 3. Reconstructing the same identity from stored private key bytes on subsequent runs
 // 4. Ensuring the same cryptographic identity is used across application restarts
 //
 // Current Status: FULLY FUNCTIONAL
-// - Private keys are properly extracted and stored
-// - Identities are reconstructed from stored keys, maintaining consistency
-// - File permissions are secure (0600)
+// - Private keys are properly extracted and stored in keyring
+// - Identities are reconstructed from keyring, maintaining consistency
+// - Keys are encrypted using PBES2_HS512_A256KW algorithm
 // - Comprehensive error handling and logging
 //
 // Security Features:
-// - Keys stored in DefraDB store directory (.defra/defra_identity.key)
-// - File permissions restricted to owner only (0600)
-// - Hex encoding for safe text storage
-// - Proper error handling for corrupted or missing key files
-//
-// Future Enhancements:
-// - Add support for keyring integration using cfg.DefraDB.KeyringSecret
-// - Consider key rotation and backup mechanisms
-// - Add optional encryption of stored key files
+// - Keys stored in encrypted keyring (default: {storePath}/keys/)
+// - Encryption key derived from KeyringSecret
+// - Proper error handling for corrupted or missing keys
+// - Requires DEFRA_KEYRING_SECRET environment variable or config
 
-// getOrCreateNodeIdentity retrieves an existing node identity from storage or creates a new one
-func getOrCreateNodeIdentity(storePath string) (identity.Identity, error) {
-	keyPath := filepath.Join(storePath, keyFileName)
-
-	// Try to load existing key
-	if _, err := os.Stat(keyPath); err == nil {
-		logger.Sugar.Info("Loading existing DefraDB identity from storage")
-		return loadNodeIdentity(keyPath)
+// openKeyring opens a keyring from the config.
+// Returns an error if keyring cannot be opened (KeyringSecret is required).
+func openKeyring(cfg *config.Config) (keyring.Keyring, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
+	if cfg.DefraDB.KeyringSecret == "" {
+		return nil, fmt.Errorf("KeyringSecret is required for keyring-based key management")
 	}
 
-	// Create new key if none exists
-	logger.Sugar.Info("Generating new DefraDB identity")
-	nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1)
-	if err != nil {
-		return nodeIdentity, fmt.Errorf("failed to generate new identity: %w", err)
+	// Use file-based keyring (default for DefraDB)
+	// Keyring path defaults to "keys" directory in store path, or "keys" in current dir
+	keyringPath := filepath.Join(cfg.DefraDB.Store.Path, "keys")
+	if cfg.DefraDB.Store.Path == "" {
+		keyringPath = "keys"
 	}
 
-	// Save the new key
-	if err := saveNodeIdentity(keyPath, nodeIdentity); err != nil {
-		logger.Sugar.Warnf("Failed to save identity to storage: %v", err)
-		// Continue with ephemeral key if save fails
+	// Ensure directory exists
+	if err := os.MkdirAll(keyringPath, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create keyring directory: %w", err)
 	}
 
-	return nodeIdentity, nil
+	secret := []byte(cfg.DefraDB.KeyringSecret)
+	return keyring.OpenFileKeyring(keyringPath, secret)
 }
 
-// saveNodeIdentity saves the private key bytes of a node identity for persistence
-func saveNodeIdentity(keyPath string, nodeIdentity identity.Identity) error {
-	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(keyPath), 0755); err != nil {
-		return fmt.Errorf("failed to create key directory: %w", err)
+// getOrCreateNodeIdentity retrieves an existing node identity from keyring or creates a new one
+func getOrCreateNodeIdentity(cfg *config.Config) (identity.Identity, error) {
+	// Open keyring (required, no fallback)
+	kr, err := openKeyring(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open keyring: %w", err)
 	}
 
+	// Try to load existing identity from keyring
+	identityBytes, err := kr.Get(nodeIdentityKeyName)
+	if err != nil {
+		if !errors.Is(err, keyring.ErrNotFound) {
+			return nil, fmt.Errorf("failed to get identity from keyring: %w", err)
+		}
+
+		// Key not found, create new identity
+		logger.Sugar.Info("Generating new DefraDB identity")
+		nodeIdentity, err := identity.Generate(crypto.KeyTypeSecp256k1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate new identity: %w", err)
+		}
+
+		// Save the new identity to keyring
+		if err := saveNodeIdentityToKeyring(kr, nodeIdentity); err != nil {
+			return nil, fmt.Errorf("failed to save identity to keyring: %w", err)
+		}
+
+		return nodeIdentity, nil
+	}
+
+	// Load existing identity from keyring
+	logger.Sugar.Info("Loading existing DefraDB identity from keyring")
+	return loadNodeIdentityFromKeyring(identityBytes)
+}
+
+// saveNodeIdentityToKeyring saves the private key bytes of a node identity to the keyring
+func saveNodeIdentityToKeyring(kr keyring.Keyring, nodeIdentity identity.Identity) error {
 	// Cast to FullIdentity to access private key
 	fullIdentity, ok := nodeIdentity.(identity.FullIdentity)
 	if !ok {
@@ -117,36 +144,34 @@ func saveNodeIdentity(keyPath string, nodeIdentity identity.Identity) error {
 		return fmt.Errorf("private key has no raw bytes")
 	}
 
-	// Encode as hex string for storage
-	keyHex := hex.EncodeToString(keyBytes)
+	// Format: "keyType:rawKeyBytes" (same format as DefraDB CLI)
+	keyType := string(privateKey.Type())
+	identityBytes := append([]byte(keyType+":"), keyBytes...)
 
-	// Write to file with restricted permissions
-	if err := os.WriteFile(keyPath, []byte(keyHex), 0600); err != nil {
-		return fmt.Errorf("failed to write key file: %w", err)
+	// Save to keyring
+	if err := kr.Set(nodeIdentityKeyName, identityBytes); err != nil {
+		return fmt.Errorf("failed to save identity to keyring: %w", err)
 	}
 
-	logger.Sugar.With("path", keyPath).Info("DefraDB identity private key saved to storage")
+	logger.Sugar.Info("DefraDB identity private key saved to keyring")
 	return nil
 }
 
-// loadNodeIdentity loads a node identity from stored private key bytes
-func loadNodeIdentity(keyPath string) (identity.Identity, error) {
-	// Read the stored key file
-	keyHex, err := os.ReadFile(keyPath)
-	if err != nil {
-		var emptyIdentity identity.Identity
-		return emptyIdentity, fmt.Errorf("failed to read key file: %w", err)
+// loadNodeIdentityFromKeyring loads a node identity from keyring bytes
+func loadNodeIdentityFromKeyring(identityBytes []byte) (identity.Identity, error) {
+	// Parse the format: "keyType:rawKeyBytes"
+	sepPos := bytes.Index(identityBytes, []byte(":"))
+	if sepPos == -1 {
+		// Old format without key type prefix, assume secp256k1
+		identityBytes = append([]byte(crypto.KeyTypeSecp256k1+":"), identityBytes...)
+		sepPos = len(crypto.KeyTypeSecp256k1)
 	}
 
-	// Decode hex string to bytes
-	keyBytes, err := hex.DecodeString(string(keyHex))
-	if err != nil {
-		var emptyIdentity identity.Identity
-		return emptyIdentity, fmt.Errorf("failed to decode key hex: %w", err)
-	}
+	keyType := string(identityBytes[:sepPos])
+	keyBytes := identityBytes[sepPos+1:]
 
 	// Reconstruct private key from bytes
-	privateKey, err := crypto.PrivateKeyFromBytes(crypto.KeyTypeSecp256k1, keyBytes)
+	privateKey, err := crypto.PrivateKeyFromBytes(crypto.KeyType(keyType), keyBytes)
 	if err != nil {
 		var emptyIdentity identity.Identity
 		return emptyIdentity, fmt.Errorf("failed to reconstruct private key: %w", err)
@@ -159,7 +184,7 @@ func loadNodeIdentity(keyPath string) (identity.Identity, error) {
 		return emptyIdentity, fmt.Errorf("failed to reconstruct identity from private key: %w", err)
 	}
 
-	logger.Sugar.With("path", keyPath).Info("DefraDB identity successfully loaded from storage")
+	logger.Sugar.Info("DefraDB identity successfully loaded from keyring")
 	return fullIdentity, nil
 }
 
@@ -213,10 +238,10 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 
 	logger.Init(cfg.Logger.Development)
 
-	// Use persistent identity instead of ephemeral one
-	nodeIdentity, err := getOrCreateNodeIdentity(cfg.DefraDB.Store.Path)
+	// Use persistent identity from keyring (required, no fallback)
+	nodeIdentity, err := getOrCreateNodeIdentity(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("error getting or creating identity: %v", err)
+		return nil, fmt.Errorf("error getting or creating identity: %w", err)
 	}
 
 	// Create LibP2P private key from the same identity to ensure consistent peer ID
@@ -259,14 +284,14 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 		http.WithAddress(defraUrl),
 		node.WithNodeIdentity(identity.Identity(nodeIdentity)),
 	}
-	
+
 	// Add P2P configuration options - DefraDB 0.20 accepts go-p2p NodeOpt as node.Option
 	// This ensures consistent peer ID by using our persistent private key
 	if len(listenAddress) > 0 {
 		options = append(options, p2p.WithListenAddresses(listenAddress))
 		logger.Sugar.Infof("P2P Listen Address configured: %s", listenAddress)
 	}
-	
+
 	if len(libp2pKeyBytes) > 0 {
 		options = append(options, p2p.WithPrivateKey(libp2pKeyBytes))
 		logger.Sugar.Info("P2P Private Key configured for consistent peer ID")
@@ -319,5 +344,6 @@ func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaAp
 	cfg.DefraDB.Store.Path = t.TempDir()
 	cfg.DefraDB.Url = defraUrl
 	cfg.DefraDB.P2P.ListenAddr = listenAddress
+	cfg.DefraDB.KeyringSecret = "testSecret"
 	return StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
 }
