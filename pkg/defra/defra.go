@@ -13,6 +13,7 @@ import (
 	"github.com/shinzonetwork/app-sdk/pkg/config"
 	"github.com/shinzonetwork/app-sdk/pkg/logger"
 	"github.com/shinzonetwork/app-sdk/pkg/networking"
+	"github.com/sourcenetwork/corelog"
 	"github.com/sourcenetwork/defradb/acp/identity"
 	"github.com/sourcenetwork/defradb/crypto"
 	"github.com/sourcenetwork/defradb/http"
@@ -213,6 +214,29 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 
 	logger.Init(cfg.Logger.Development)
 
+	// Configure DefraDB logging FIRST, before any other initialization
+	// When Development is false, disable DefraDB logs by setting level to "error"
+	// and using log overrides to silence all loggers
+	logLevel := "info"
+	logOverrides := ""
+	if !cfg.Logger.Development {
+		logLevel = "error"
+		// Disable all known loggers: p2p, db, node, http, coreblock, etc.
+		// Format: <name>,level=error;<name>,level=error;...
+		logOverrides = "p2p,level=error;db,level=error;node,level=error;http,level=error;coreblock,level=error"
+	}
+	corelog.SetConfig(corelog.Config{
+		Level:            logLevel,
+		Format:           "text",
+		Output:           "stderr",
+		EnableStackTrace: false,
+		EnableSource:     false,
+		DisableColor:     true,
+	})
+	if logOverrides != "" {
+		corelog.SetConfigOverrides(logOverrides)
+	}
+
 	// Use persistent identity instead of ephemeral one
 	nodeIdentity, err := getOrCreateNodeIdentity(cfg.DefraDB.Store.Path)
 	if err != nil {
@@ -259,14 +283,14 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 		http.WithAddress(defraUrl),
 		node.WithNodeIdentity(identity.Identity(nodeIdentity)),
 	}
-	
+
 	// Add P2P configuration options - DefraDB 0.20 accepts go-p2p NodeOpt as node.Option
 	// This ensures consistent peer ID by using our persistent private key
 	if len(listenAddress) > 0 {
 		options = append(options, p2p.WithListenAddresses(listenAddress))
 		logger.Sugar.Infof("P2P Listen Address configured: %s", listenAddress)
 	}
-	
+
 	if len(libp2pKeyBytes) > 0 {
 		options = append(options, p2p.WithPrivateKey(libp2pKeyBytes))
 		logger.Sugar.Info("P2P Private Key configured for consistent peer ID")
