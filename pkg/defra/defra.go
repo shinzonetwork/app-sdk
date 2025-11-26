@@ -327,6 +327,8 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 		return nil, fmt.Errorf("failed to add collections of interest %v: %w", collectionsOfInterest, err)
 	}
 
+	config.SetAppConfig(cfg)
+
 	return defraNode, nil
 }
 
