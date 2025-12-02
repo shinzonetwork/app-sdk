@@ -269,11 +269,8 @@ func SignWithP2PKeys(message string, defraNode *node.Node, cfg *config.Config) (
 	// Construct full ed25519.PrivateKey from seed (64 bytes: 32-byte seed + 32-byte public key)
 	ed25519PrivKey := ed25519.NewKeyFromSeed(ed25519Seed)
 
-	// Sign the message using DefraDB's crypto package for consistency
-	signature, err := crypto.SignEd25519(ed25519PrivKey, []byte(message))
-	if err != nil {
-		return "", fmt.Errorf("failed to sign message with P2P key: %w", err)
-	}
+	// Sign the message directly with the Ed25519 private key, mirroring the working example
+	signature := ed25519.Sign(ed25519PrivKey, []byte(message))
 
 	// Return hex-encoded signature
 	return hex.EncodeToString(signature), nil
