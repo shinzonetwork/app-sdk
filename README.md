@@ -74,6 +74,14 @@ In order to receive the AttestationRecords for a given View, use the `attestatio
 
 You can also fetch all the attestation records for a given document with `attestation.GetAttestationRecords` method exposed in the attestation package.
 
-In future iterations, app-sdk will also allow you to configure your queries to automatically filter with a minimum attestation threshhold (coming soon!), dramatically simplifying the attestation query flow.
+The app-sdk also allows you to filter your queries with a pre-configured (or supplied during runtime as a parameter) minimum attestation record threshold. This can be pre-configured in your config.yaml:
+
+```
+shinzo:
+  minimum_attestations: 2
+```
+Once configured, you can use `QuerySingleWithConfiguredAttestationFilter` or `QueryArrayWithConfiguredAttestationFilter` (from the `attestation` package) to query objects or arrays respectively. These work similarly to `QuerySingle` and `QueryArray` (from the `defra` package) respectively except they will also filter the results based on that minimum attestation record filter you specified in your config. *Please make sure you have added the attestation record (using `AddAttestationRecordCollection`) for whatever collections you query using these methods!*
+
+Similarly, you can provide a minimum attestation record threshold as a parameter using `QuerySingleWithAttestationFilter` or `QueryArrayWithAttestationFilter` (from the `attestation` package) for objects or arrays respectively.
 
 For more context on attestation records, please see [this ADR](https://github.com/shinzonetwork/shinzo-host-client/blob/main/adr/02-AttestationRecords.md).
