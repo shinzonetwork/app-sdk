@@ -32,7 +32,7 @@ func (c *queryClient) query(ctx context.Context, query string) (interface{}, err
 	if query == "" {
 		return nil, fmt.Errorf("query parameter is empty")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 240*time.Second)
 	defer cancel()
 
 	result := c.defraNode.DB.ExecRequest(ctx, query)
