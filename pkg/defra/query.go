@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/sourcenetwork/defradb/node"
 )
@@ -31,6 +32,8 @@ func (c *queryClient) query(ctx context.Context, query string) (interface{}, err
 	if query == "" {
 		return nil, fmt.Errorf("query parameter is empty")
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
 	result := c.defraNode.DB.ExecRequest(ctx, query)
 	gqlResult := result.GQL
