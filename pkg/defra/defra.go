@@ -3,6 +3,7 @@ package defra
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -346,4 +347,63 @@ func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaAp
 	cfg.DefraDB.P2P.ListenAddr = listenAddress
 	cfg.DefraDB.KeyringSecret = "testSecret"
 	return StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
+}
+
+// Subscribe creates a GraphQL subscription for real-time updates
+func Subscribe[T any](ctx context.Context, defraNode *node.Node, subscription string) (<-chan T, error) {
+	result := defraNode.DB.ExecRequest(ctx, subscription)
+
+	if result.Subscription == nil {
+		// Check if there are GraphQL errors that explain why subscription is nil
+		if result.GQL.Errors != nil {
+			return nil, fmt.Errorf("subscription failed with GraphQL errors: %v", result.GQL.Errors)
+		}
+		return nil, fmt.Errorf("subscription channel is nil - DefraDB may not support subscriptions for this query: %s", subscription)
+	}
+
+	resultChan := make(chan T, 100)
+
+	go func() {
+		defer close(resultChan)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case gqlResult, ok := <-result.Subscription:
+				if !ok {
+					return
+				}
+
+				if gqlResult.Errors != nil {
+					logger.Sugar.Errorf("subscription errors: %v", gqlResult.Errors)
+					continue // Log errors but continue
+				}
+
+				// Parse and send typed result
+				var typedResult T
+				if err := marshalUnmarshal(gqlResult.Data, &typedResult); err == nil {
+					select {
+					case resultChan <- typedResult:
+					case <-ctx.Done():
+						return
+					}
+				} else {
+					logger.Sugar.Errorf("failed to parse subscription data: %v", err)
+				}
+			}
+		}
+	}()
+
+	return resultChan, nil
+}
+
+// marshalUnmarshal converts a generic interface{} to a specific typed struct
+// using JSON marshal/unmarshal. This is the same pattern used throughout the query client.
+func marshalUnmarshal(data interface{}, target interface{}) error {
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data: %w", err)
+	}
+	return json.Unmarshal(dataBytes, target)
 }
