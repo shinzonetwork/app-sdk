@@ -3,6 +3,7 @@ package defra
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -32,6 +33,14 @@ var DefaultConfig *config.Config = &config.Config{
 		},
 		Store: config.DefraStoreConfig{
 			Path: ".defra",
+		},
+		Optimization: config.OptimizationConfig{
+			EnableEventManager:   true,
+			EnableConnectionPool: true,
+			MaxConnections:       20,
+			DefaultBufferSize:    50,
+			EnableBackpressure:   true,
+			MemoryThresholdMB:    100,
 		},
 	},
 	Logger: config.LoggerConfig{
@@ -346,4 +355,57 @@ func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaAp
 	cfg.DefraDB.P2P.ListenAddr = listenAddress
 	cfg.DefraDB.KeyringSecret = "testSecret"
 	return StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
+}
+
+func Subscribe[T any](ctx context.Context, defraNode *node.Node, subscription string) (<-chan T, error) {
+	result := defraNode.DB.ExecRequest(ctx, subscription)
+	if result.Subscription == nil {
+		return nil, fmt.Errorf("failed to subscribe: %s , channel is nil", subscription)
+	}
+
+	// Create typed channel for subscription events
+	resultChan := make(chan T, 100)
+
+	//Process subscription events in background
+	go func() {
+		defer close(resultChan)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case gqlResult, ok := <-result.Subscription:
+				if !ok {
+					return
+				}
+
+				if gqlResult.Errors != nil {
+					// log errors but continue
+					logger.Sugar.Errorf("failed to subscribe: %s , errors: %v", subscription, gqlResult.Errors)
+					continue
+				}
+				// Parse and send typed result
+				var typedResult T
+				if err := marshalUnmarshal(gqlResult.Data, &typedResult); err == nil {
+					select {
+					case resultChan <- typedResult:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return resultChan, nil
+}
+
+// marshalUnmarshal converts a generic interface{} to a specific typed struct
+// using JSON marshal/unmarshal. This is the same pattern used throughout the query client.
+func marshalUnmarshal(data interface{}, target interface{}) error {
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data: %w", err)
+	}
+	return json.Unmarshal(dataBytes, target)
 }

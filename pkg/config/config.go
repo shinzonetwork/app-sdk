@@ -17,10 +17,20 @@ type Config struct {
 }
 
 type DefraDBConfig struct {
-	Url           string           `yaml:"url"`
-	KeyringSecret string           `yaml:"keyring_secret"`
-	P2P           DefraP2PConfig   `yaml:"p2p"`
-	Store         DefraStoreConfig `yaml:"store"`
+	Url           string             `yaml:"url"`
+	KeyringSecret string             `yaml:"keyring_secret"`
+	P2P           DefraP2PConfig     `yaml:"p2p"`
+	Store         DefraStoreConfig   `yaml:"store"`
+	Optimization  OptimizationConfig `yaml:"optimization"`
+}
+
+type OptimizationConfig struct {
+	EnableEventManager   bool `yaml:"enable_event_manager"`
+	EnableConnectionPool bool `yaml:"enable_connection_pool"`
+	MaxConnections       int  `yaml:"max_connections"`
+	DefaultBufferSize    int  `yaml:"default_buffer_size"`
+	EnableBackpressure   bool `yaml:"enable_backpressure"`
+	MemoryThresholdMB    int  `yaml:"memory_threshold_mb"`
 }
 
 type DefraP2PConfig struct {
