@@ -29,7 +29,7 @@ func setupTestNode(t *testing.T) (*node.Node, *config.Config) {
 			KeyringSecret: "test-secret",
 			P2P: config.DefraP2PConfig{
 				BootstrapPeers: []string{},
-				ListenAddr:     "",
+				ListenAddr:     "/ip4/0.0.0.0/tcp/0", // Use random port for test isolation
 			},
 			Store: config.DefraStoreConfig{
 				Path: t.TempDir(),
