@@ -357,16 +357,20 @@ func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaAp
 	return StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
 }
 
+// Subscribe creates a GraphQL subscription for real-time updates
 func Subscribe[T any](ctx context.Context, defraNode *node.Node, subscription string) (<-chan T, error) {
 	result := defraNode.DB.ExecRequest(ctx, subscription)
+
 	if result.Subscription == nil {
-		return nil, fmt.Errorf("failed to subscribe: %s , channel is nil", subscription)
+		// Check if there are GraphQL errors that explain why subscription is nil
+		if result.GQL.Errors != nil {
+			return nil, fmt.Errorf("subscription failed with GraphQL errors: %v", result.GQL.Errors)
+		}
+		return nil, fmt.Errorf("subscription channel is nil - DefraDB may not support subscriptions for this query: %s", subscription)
 	}
 
-	// Create typed channel for subscription events
 	resultChan := make(chan T, 100)
 
-	//Process subscription events in background
 	go func() {
 		defer close(resultChan)
 
@@ -392,6 +396,8 @@ func Subscribe[T any](ctx context.Context, defraNode *node.Node, subscription st
 					case <-ctx.Done():
 						return
 					}
+				} else {
+					logger.Sugar.Errorf("failed to parse subscription data: %v, raw data: %+v", err, gqlResult.Data)
 				}
 			}
 		}
