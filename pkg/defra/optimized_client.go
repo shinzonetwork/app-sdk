@@ -14,6 +14,7 @@ import (
 // OptimizedDefraClient provides a high-performance, memory-efficient interface to DefraDB
 type OptimizedDefraClient struct {
 	node           *node.Node
+	networkHandler *NetworkHandler
 	eventManager   *EventManager
 	connectionPool *ConnectionPool
 	config         *OptimizedClientConfig
@@ -42,7 +43,7 @@ func DefaultOptimizedClientConfig() *OptimizedClientConfig {
 // NewOptimizedDefraClient creates a new optimized DefraDB client
 func NewOptimizedDefraClient(cfg *config.Config, schemaApplier SchemaApplier, collectionsOfInterest ...string) (*OptimizedDefraClient, error) {
 	// Start DefraDB node
-	node, err := StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
+	node, networkHandler, err := StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start DefraDB instance: %w", err)
 	}
@@ -62,6 +63,7 @@ func NewOptimizedDefraClient(cfg *config.Config, schemaApplier SchemaApplier, co
 
 	client := &OptimizedDefraClient{
 		node:           node,
+		networkHandler: networkHandler,
 		eventManager:   eventManager,
 		connectionPool: pool,
 		config:         clientConfig,
@@ -69,6 +71,56 @@ func NewOptimizedDefraClient(cfg *config.Config, schemaApplier SchemaApplier, co
 
 	logger.Sugar.Info("OptimizedDefraClient created successfully")
 	return client, nil
+}
+
+// Network control methods
+
+// StartNetwork activates P2P networking
+func (c *OptimizedDefraClient) StartNetwork() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return fmt.Errorf("client is closed")
+	}
+
+	return c.networkHandler.StartNetwork()
+}
+
+// StopNetwork deactivates P2P networking
+func (c *OptimizedDefraClient) StopNetwork() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return fmt.Errorf("client is closed")
+	}
+
+	return c.networkHandler.StopNetwork()
+}
+
+// ToggleNetwork switches P2P networking on/off
+func (c *OptimizedDefraClient) ToggleNetwork() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return fmt.Errorf("client is closed")
+	}
+
+	return c.networkHandler.ToggleNetwork()
+}
+
+// IsNetworkActive returns whether P2P networking is currently active
+func (c *OptimizedDefraClient) IsNetworkActive() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.closed {
+		return false
+	}
+
+	return c.networkHandler.IsNetworkActive()
 }
 
 // Query executes a GraphQL query with connection pooling and optimization

@@ -28,6 +28,7 @@ var DefaultConfig *config.Config = &config.Config{
 		Url:           "http://localhost:9181",
 		KeyringSecret: os.Getenv("DEFRA_KEYRING_SECRET"),
 		P2P: config.DefraP2PConfig{
+			Enabled:        true, // P2P enabled by default
 			BootstrapPeers: requiredPeers,
 			ListenAddr:     defaultListenAddress,
 		},
@@ -51,6 +52,82 @@ var DefaultConfig *config.Config = &config.Config{
 var requiredPeers []string = []string{} // Here, we can add some "big peers" to give nodes a starting place when building their peer network
 const defaultListenAddress string = "/ip4/127.0.0.1/tcp/9171"
 const nodeIdentityKeyName string = "node-identity-key"
+
+// NetworkHandler manages P2P networking for DefraDB
+type NetworkHandler struct {
+	node            *node.Node
+	cfg             *config.Config
+	isNetworkActive bool
+	bootstrapPeers  []string
+	ctx             context.Context
+	cancel          context.CancelFunc
+}
+
+// NewNetworkHandler creates a new network handler
+func NewNetworkHandler(defraNode *node.Node, cfg *config.Config) *NetworkHandler {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &NetworkHandler{
+		node:            defraNode,
+		cfg:             cfg,
+		isNetworkActive: false,
+		bootstrapPeers:  cfg.DefraDB.P2P.BootstrapPeers,
+		ctx:             ctx,
+		cancel:          cancel,
+	}
+}
+
+// StartNetwork activates P2P networking
+func (nh *NetworkHandler) StartNetwork() error {
+	if nh.isNetworkActive {
+		logger.Sugar.Info("📡 P2P network already active")
+		return nil
+	}
+
+	logger.Sugar.Info("🚀 Starting P2P network connections...")
+
+	// Connect to bootstrap peers
+	err := connectToPeers(nh.ctx, nh.node, nh.bootstrapPeers)
+	if err != nil {
+		return fmt.Errorf("failed to connect to peers: %w", err)
+	}
+
+	nh.isNetworkActive = true
+	logger.Sugar.Info("✅ P2P network activated")
+	return nil
+}
+
+// StopNetwork deactivates P2P networking
+func (nh *NetworkHandler) StopNetwork() error {
+	if !nh.isNetworkActive {
+		logger.Sugar.Info("🔇 P2P network already inactive")
+		return nil
+	}
+
+	logger.Sugar.Info("🛑 Stopping P2P network connections...")
+
+	// Cancel network context to stop connections
+	nh.cancel()
+
+	// Create new context for future use
+	nh.ctx, nh.cancel = context.WithCancel(context.Background())
+
+	nh.isNetworkActive = false
+	logger.Sugar.Info("❌ P2P network deactivated")
+	return nil
+}
+
+// IsNetworkActive returns whether P2P networking is currently active
+func (nh *NetworkHandler) IsNetworkActive() bool {
+	return nh.isNetworkActive
+}
+
+// ToggleNetwork switches P2P networking on/off
+func (nh *NetworkHandler) ToggleNetwork() error {
+	if nh.isNetworkActive {
+		return nh.StopNetwork()
+	}
+	return nh.StartNetwork()
+}
 
 // Key Management Implementation Notes:
 //
@@ -234,11 +311,11 @@ func createLibP2PKeyFromIdentity(nodeIdentity identity.Identity) (libp2pcrypto.P
 	return libp2pPrivKey, nil
 }
 
-func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collectionsOfInterest ...string) (*node.Node, error) {
+func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collectionsOfInterest ...string) (*node.Node, *NetworkHandler, error) {
 	ctx := context.Background()
 
 	if cfg == nil {
-		return nil, fmt.Errorf("config cannot be nil")
+		return nil, nil, fmt.Errorf("config cannot be nil")
 	}
 	cfg.DefraDB.P2P.BootstrapPeers = append(cfg.DefraDB.P2P.BootstrapPeers, requiredPeers...)
 	if len(cfg.DefraDB.P2P.ListenAddr) == 0 {
@@ -250,25 +327,25 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 	// Use persistent identity from keyring (required, no fallback)
 	nodeIdentity, err := getOrCreateNodeIdentity(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("error getting or creating identity: %w", err)
+		return nil, nil, fmt.Errorf("error getting or creating identity: %w", err)
 	}
 
 	// Create LibP2P private key from the same identity to ensure consistent peer ID
 	libp2pPrivKey, err := createLibP2PKeyFromIdentity(nodeIdentity)
 	if err != nil {
-		return nil, fmt.Errorf("error creating LibP2P private key from identity: %v", err)
+		return nil, nil, fmt.Errorf("error creating LibP2P private key from identity: %v", err)
 	}
 
 	// Get raw bytes for P2P private key configuration (DefraDB 0.20 API TBD)
 	libp2pKeyBytes, err := libp2pPrivKey.Raw()
 	if err != nil {
-		return nil, fmt.Errorf("error getting LibP2P private key bytes: %v", err)
+		return nil, nil, fmt.Errorf("error getting LibP2P private key bytes: %v", err)
 	}
 
 	// Get real IP address to replace loopback addresses
 	ipAddress, err := networking.GetLANIP()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get LAN IP address: %v", err)
+		return nil, nil, fmt.Errorf("failed to get LAN IP address: %v", err)
 	}
 
 	// Replace loopback addresses in URL with real IP
@@ -307,18 +384,12 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 	}
 	defraNode, err := node.New(ctx, options...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create defra node: %v ", err)
+		return nil, nil, fmt.Errorf("failed to create defra node: %v ", err)
 	}
 
 	err = defraNode.Start(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start defra node: %v ", err)
-	}
-
-	// Connect to bootstrap peers
-	err = connectToPeers(ctx, defraNode, cfg.DefraDB.P2P.BootstrapPeers)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to any peers, with error: %w", err)
+		return nil, nil, fmt.Errorf("failed to start defra node: %v ", err)
 	}
 
 	err = schemaApplier.ApplySchema(ctx, defraNode)
@@ -327,16 +398,30 @@ func StartDefraInstance(cfg *config.Config, schemaApplier SchemaApplier, collect
 			logger.Sugar.Warnf("Failed to apply schema: %v\nProceeding...", err)
 		} else {
 			defer defraNode.Close(ctx)
-			return nil, fmt.Errorf("failed to apply schema: %v", err)
+			return nil, nil, fmt.Errorf("failed to apply schema: %v", err)
 		}
 	}
 
 	err = defraNode.DB.AddP2PCollections(ctx, collectionsOfInterest...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to add collections of interest %v: %w", collectionsOfInterest, err)
+		return nil, nil, fmt.Errorf("failed to add collections of interest %v: %w", collectionsOfInterest, err)
 	}
 
-	return defraNode, nil
+	// Create network handler
+	networkHandler := NewNetworkHandler(defraNode, cfg)
+
+	// Conditionally start P2P networking based on config
+	if cfg.DefraDB.P2P.Enabled {
+		err = networkHandler.StartNetwork()
+		if err != nil {
+			logger.Sugar.Warnf("Failed to start P2P network: %v", err)
+			// Don't fail completely, just log the warning
+		}
+	} else {
+		logger.Sugar.Info("🔇 P2P networking disabled by configuration")
+	}
+
+	return defraNode, networkHandler, nil
 }
 
 // A simple wrapper on StartDefraInstance that changes the configured defra store path to a temp directory for the test
@@ -354,7 +439,8 @@ func StartDefraInstanceWithTestConfig(t *testing.T, cfg *config.Config, schemaAp
 	cfg.DefraDB.Url = defraUrl
 	cfg.DefraDB.P2P.ListenAddr = listenAddress
 	cfg.DefraDB.KeyringSecret = "testSecret"
-	return StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
+	node, _, err := StartDefraInstance(cfg, schemaApplier, collectionsOfInterest...)
+	return node, err
 }
 
 // Subscribe creates a GraphQL subscription for real-time updates

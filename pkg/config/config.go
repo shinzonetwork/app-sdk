@@ -34,6 +34,7 @@ type OptimizationConfig struct {
 }
 
 type DefraP2PConfig struct {
+	Enabled        bool     `yaml:"enabled"` // Toggle P2P networking on/off
 	BootstrapPeers []string `yaml:"bootstrap_peers"`
 	ListenAddr     string   `yaml:"listen_addr"`
 }
