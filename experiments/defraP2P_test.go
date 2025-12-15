@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shinzonetwork/app-sdk/pkg/defra"
-	"github.com/shinzonetwork/app-sdk/pkg/logger"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/defra"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/logger"
 	"github.com/sourcenetwork/defradb/http"
 	"github.com/sourcenetwork/defradb/node"
 	"github.com/sourcenetwork/go-p2p"

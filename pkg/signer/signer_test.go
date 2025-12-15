@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shinzonetwork/app-sdk/pkg/config"
-	"github.com/shinzonetwork/app-sdk/pkg/defra"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/config"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/defra"
 	"github.com/sourcenetwork/defradb/node"
 	"github.com/stretchr/testify/require"
 )

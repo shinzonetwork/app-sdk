@@ -12,9 +12,9 @@ import (
 	"testing"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/shinzonetwork/app-sdk/pkg/config"
-	"github.com/shinzonetwork/app-sdk/pkg/logger"
-	"github.com/shinzonetwork/app-sdk/pkg/networking"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/config"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/logger"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/networking"
 	"github.com/sourcenetwork/defradb/acp/identity"
 	"github.com/sourcenetwork/defradb/crypto"
 	"github.com/sourcenetwork/defradb/http"

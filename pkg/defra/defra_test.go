@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/shinzonetwork/app-sdk/pkg/config"
-	"github.com/shinzonetwork/app-sdk/pkg/file"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/config"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/file"
 	"github.com/stretchr/testify/require"
 )
 

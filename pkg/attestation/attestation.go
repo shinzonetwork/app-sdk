@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/shinzonetwork/app-sdk/pkg/defra"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/defra"
 	"github.com/shinzonetwork/indexer/pkg/schema"
 	"github.com/sourcenetwork/defradb/node"
 )

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shinzonetwork/app-sdk/pkg/config"
-	"github.com/shinzonetwork/app-sdk/pkg/logger"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/config"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/logger"
 	"github.com/sourcenetwork/defradb/keyring"
 	"github.com/stretchr/testify/require"
 )

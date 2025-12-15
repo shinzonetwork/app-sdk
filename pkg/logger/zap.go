@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/shinzonetwork/app-sdk/pkg/errors"
+	"github.com/shinzonetwork/shinzo-app-sdk/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
