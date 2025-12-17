@@ -210,9 +210,9 @@ func TestDefraNodeIdentityPersistenceAcrossStartStopRestart(t *testing.T) {
 
 	// First startup: Create DefraDB node and capture its identity
 	t.Run("first startup", func(t *testing.T) {
-		defraNode1, err := StartDefraInstance(testConfig, schemaApplier)
+		defraNode, _, err := StartDefraInstance(testConfig, schemaApplier)
 		require.NoError(t, err)
-		require.NotNil(t, defraNode1)
+		require.NotNil(t, defraNode)
 
 		// Verify keyring file was created
 		require.FileExists(t, keyringPath, "Keyring file should exist after first startup")
@@ -223,7 +223,7 @@ func TestDefraNodeIdentityPersistenceAcrossStartStopRestart(t *testing.T) {
 		require.NotEmpty(t, firstIdentityKeyContent, "Keyring file should have content")
 
 		// Properly close the node
-		err = defraNode1.Close(ctx)
+		err = defraNode.Close(ctx)
 		require.NoError(t, err)
 
 		// Add a small delay to ensure complete cleanup
@@ -232,9 +232,9 @@ func TestDefraNodeIdentityPersistenceAcrossStartStopRestart(t *testing.T) {
 
 	// Second startup: Restart with same config and verify same identity
 	t.Run("second startup (restart)", func(t *testing.T) {
-		defraNode2, err := StartDefraInstance(testConfig, schemaApplier)
+		defraNode, _, err := StartDefraInstance(testConfig, schemaApplier)
 		require.NoError(t, err)
-		require.NotNil(t, defraNode2)
+		require.NotNil(t, defraNode)
 
 		// Read the keyring file content and verify it's the same
 		secondIdentityKeyContent, err = os.ReadFile(keyringPath)
@@ -246,7 +246,7 @@ func TestDefraNodeIdentityPersistenceAcrossStartStopRestart(t *testing.T) {
 
 		fmt.Println(firstIdentityKeyContent, "====", secondIdentityKeyContent)
 		// Properly close the node
-		err = defraNode2.Close(ctx)
+		err = defraNode.Close(ctx)
 		require.NoError(t, err)
 
 		// Add a small delay to ensure complete cleanup
@@ -255,9 +255,9 @@ func TestDefraNodeIdentityPersistenceAcrossStartStopRestart(t *testing.T) {
 
 	// Third startup: Another restart to verify consistency
 	t.Run("third startup (second restart)", func(t *testing.T) {
-		defraNode3, err := StartDefraInstance(testConfig, schemaApplier)
+		defraNode, _, err := StartDefraInstance(testConfig, schemaApplier)
 		require.NoError(t, err)
-		require.NotNil(t, defraNode3)
+		require.NotNil(t, defraNode)
 
 		// Read the keyring file content and verify it's still the same
 		thirdIdentityKeyContent, err = os.ReadFile(keyringPath)
@@ -270,7 +270,7 @@ func TestDefraNodeIdentityPersistenceAcrossStartStopRestart(t *testing.T) {
 
 		fmt.Println(secondIdentityKeyContent, "====", thirdIdentityKeyContent)
 		// Properly close the node
-		err = defraNode3.Close(ctx)
+		err = defraNode.Close(ctx)
 		require.NoError(t, err)
 	})
 
@@ -316,12 +316,12 @@ func TestPeerIDConsistencyAcrossStartStopRestart(t *testing.T) {
 
 	// First startup: Create DefraDB node and capture its peer ID
 	t.Run("first startup", func(t *testing.T) {
-		defraNode1, err := StartDefraInstance(testConfig, schemaApplier)
+		defraNode, _, err := StartDefraInstance(testConfig, schemaApplier)
 		require.NoError(t, err)
-		require.NotNil(t, defraNode1)
+		require.NotNil(t, defraNode)
 
 		// Get the peer ID
-		peerInfo, err := defraNode1.DB.PeerInfo()
+		peerInfo, err := defraNode.DB.PeerInfo()
 		require.NoError(t, err, "Failed to get peer info")
 		if len(peerInfo) > 0 {
 			firstPeerID = peerInfo[0]
@@ -331,7 +331,7 @@ func TestPeerIDConsistencyAcrossStartStopRestart(t *testing.T) {
 		fmt.Printf("First startup peer ID: %s\n", firstPeerID)
 
 		// Properly close the node
-		err = defraNode1.Close(ctx)
+		err = defraNode.Close(ctx)
 		require.NoError(t, err)
 
 		// Add a small delay to ensure complete cleanup
@@ -340,12 +340,12 @@ func TestPeerIDConsistencyAcrossStartStopRestart(t *testing.T) {
 
 	// Second startup: Restart with same config and check peer ID
 	t.Run("second startup (restart)", func(t *testing.T) {
-		defraNode2, err := StartDefraInstance(testConfig, schemaApplier)
+		defraNode, _, err := StartDefraInstance(testConfig, schemaApplier)
 		require.NoError(t, err)
-		require.NotNil(t, defraNode2)
+		require.NotNil(t, defraNode)
 
 		// Get the peer ID from the restarted node
-		peerInfo, err := defraNode2.DB.PeerInfo()
+		peerInfo, err := defraNode.DB.PeerInfo()
 		require.NoError(t, err, "Failed to get peer info")
 		if len(peerInfo) > 0 {
 			secondPeerID = peerInfo[0]
@@ -363,7 +363,7 @@ func TestPeerIDConsistencyAcrossStartStopRestart(t *testing.T) {
 		}
 
 		// Properly close the node
-		err = defraNode2.Close(ctx)
+		err = defraNode.Close(ctx)
 		require.NoError(t, err)
 
 		// Add a small delay to ensure complete cleanup
@@ -372,12 +372,12 @@ func TestPeerIDConsistencyAcrossStartStopRestart(t *testing.T) {
 
 	// Third startup: Another restart to verify consistency
 	t.Run("third startup (second restart)", func(t *testing.T) {
-		defraNode3, err := StartDefraInstance(testConfig, schemaApplier)
+		defraNode, _, err := StartDefraInstance(testConfig, schemaApplier)
 		require.NoError(t, err)
-		require.NotNil(t, defraNode3)
+		require.NotNil(t, defraNode)
 
 		// Get the peer ID from the third startup
-		peerInfo, err := defraNode3.DB.PeerInfo()
+		peerInfo, err := defraNode.DB.PeerInfo()
 		require.NoError(t, err, "Failed to get peer info")
 		if len(peerInfo) > 0 {
 			thirdPeerID = peerInfo[0]
@@ -387,7 +387,7 @@ func TestPeerIDConsistencyAcrossStartStopRestart(t *testing.T) {
 		fmt.Printf("Third startup peer ID: %s\n", thirdPeerID)
 
 		// Properly close the node
-		err = defraNode3.Close(ctx)
+		err = defraNode.Close(ctx)
 		require.NoError(t, err)
 	})
 
@@ -468,12 +468,12 @@ func TestPeerIDConsistencyWithHardcodedIdentity(t *testing.T) {
 
 	// First startup: Create DefraDB node with hardcoded identity
 	t.Run("first startup with hardcoded identity", func(t *testing.T) {
-		defraNode1, err := StartDefraInstance(testConfig, schemaApplier)
+		defraNode, _, err := StartDefraInstance(testConfig, schemaApplier)
 		require.NoError(t, err)
-		require.NotNil(t, defraNode1)
+		require.NotNil(t, defraNode)
 
 		// Get the peer ID
-		peerInfo, err := defraNode1.DB.PeerInfo()
+		peerInfo, err := defraNode.DB.PeerInfo()
 		require.NoError(t, err, "Failed to get peer info")
 		if len(peerInfo) > 0 {
 			firstPeerID = peerInfo[0]
@@ -483,7 +483,7 @@ func TestPeerIDConsistencyWithHardcodedIdentity(t *testing.T) {
 		fmt.Printf("First startup peer ID (hardcoded): %s\n", firstPeerID)
 
 		// Properly close the node
-		err = defraNode1.Close(ctx)
+		err = defraNode.Close(ctx)
 		require.NoError(t, err)
 
 		// Add a small delay to ensure complete cleanup
@@ -492,7 +492,7 @@ func TestPeerIDConsistencyWithHardcodedIdentity(t *testing.T) {
 
 	// Second startup: Restart with same hardcoded identity
 	t.Run("second startup with hardcoded identity", func(t *testing.T) {
-		defraNode2, err := StartDefraInstance(testConfig, schemaApplier)
+		defraNode2, _, err := StartDefraInstance(testConfig, schemaApplier)
 		require.NoError(t, err)
 		require.NotNil(t, defraNode2)
 
@@ -524,7 +524,7 @@ func TestPeerIDConsistencyWithHardcodedIdentity(t *testing.T) {
 
 	// Third startup: Another restart with hardcoded identity
 	t.Run("third startup with hardcoded identity", func(t *testing.T) {
-		defraNode3, err := StartDefraInstance(testConfig, schemaApplier)
+		defraNode3, _, err := StartDefraInstance(testConfig, schemaApplier)
 		require.NoError(t, err)
 		require.NotNil(t, defraNode3)
 

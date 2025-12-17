@@ -7,48 +7,40 @@ import (
 	"strings"
 
 	"github.com/shinzonetwork/shinzo-app-sdk/pkg/defra"
-	"github.com/shinzonetwork/indexer/pkg/schema"
 	"github.com/sourcenetwork/defradb/node"
 )
 
-func getAttestationRecordSDL(viewName string) string {
-	primitiveSchema := schema.GetSchema()
-	primitives, err := extractSchemaTypes(primitiveSchema)
-	if err == nil {
-		for _, primitive := range primitives {
-			if viewName == primitive { // For our primitive attestation records, we use a condensed schema
-				return fmt.Sprintf(`type AttestationRecord_%s { 
-					attested_doc: String
-					CIDs: [String]
-				}`, viewName)
-			}
-		}
-	}
-
-	// If either AttestationRecord does not have unique name, we will get an error when trying to the schema (collection already exists error)
-	// We want a separate collection of AttestationRecords for each View so that app clients don't receive all AttestationRecords, only those that are relevant to the collections/Views they care about - we can just append the View names as those must also be unique
-	return fmt.Sprintf(`type AttestationRecord_%s {
-		attested_doc: String
-		source_doc: String
+func getAttestationRecordSDL() string {
+	// Always create a single AttestationRecord collection with consistent schema
+	// The docType field allows filtering by document type instead of separate collections
+	return `type AttestationRecord {
+		attested_doc: String @index
+		source_doc: String @index  
 		CIDs: [String]
-	}`, viewName)
+		docType: String @index
+		count: Int @crdt(type: pcounter)
+	}`
 }
 
 type AttestationRecord struct {
-	AttestedDocId string   `json:"attested_doc"`
-	SourceDocId   string   `json:"source_doc"`
-	CIDs          []string `json:"CIDs"`
+    AttestedDocId string   `json:"attested_doc"`
+    SourceDocId   string   `json:"source_doc"`
+    CIDs          []string `json:"CIDs"`
+    DocType       string   `json:"docType"`      // NEW
+    Count         int      `json:"count"`        // NEW
 }
 
 func AddAttestationRecordCollection(ctx context.Context, defraNode *node.Node, associatedViewName string) error {
-	collectionSDL := getAttestationRecordSDL(associatedViewName)
+	// Ignore the associatedViewName parameter - always create single AttestationRecord collection
+	collectionSDL := getAttestationRecordSDL()
 	schemaApplier := defra.NewSchemaApplierFromProvidedSchema(collectionSDL)
 	err := schemaApplier.ApplySchema(ctx, defraNode)
 	if err != nil {
 		return fmt.Errorf("Error adding attestation record schema %s: %w", collectionSDL, err)
 	}
 
-	attestationRecords := fmt.Sprintf("AttestationRecord_%s", associatedViewName)
+	// Always use exactly "AttestationRecord" as collection name
+	attestationRecords := "AttestationRecord"
 	err = defraNode.DB.AddP2PCollections(ctx, attestationRecords)
 	if err != nil {
 		return fmt.Errorf("Error subscribing to collection %s: %v", attestationRecords, err)
@@ -64,13 +56,17 @@ func GetAttestationRecords(ctx context.Context, defraNode *node.Node, associated
 	}
 	inList := strings.Join(quoted, ", ")
 
+	// Query the single AttestationRecord collection
+	// Can optionally filter by docType if needed based on associatedViewName
 	query := fmt.Sprintf(`query {
-        AttestationRecord_%s (filter: {attested_doc: {_in: [%s]}}) {
+        AttestationRecord (filter: {attested_doc: {_in: [%s]}}) {
             attested_doc
             source_doc
             CIDs
+            docType
+            count
         }
-    }`, associatedViewName, inList)
+    }`, inList)
 	records, err := defra.QueryArray[AttestationRecord](ctx, defraNode, query)
 	if err != nil {
 		return nil, fmt.Errorf("Error fetching attestation record: %w", err)
