@@ -6,7 +6,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.43.0
 	github.com/shinzonetwork/view-creator v0.0.0-20251113191457-a28acb09bf07
-	github.com/sourcenetwork/defradb v0.20.1-0.20251217231012-a7ad297eb2c5
+	github.com/sourcenetwork/defradb v0.20.1-0.20251217232152-b3787f631698
 	github.com/sourcenetwork/go-p2p v0.1.6
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/zap v1.27.0
