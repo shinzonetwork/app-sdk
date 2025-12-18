@@ -12,13 +12,13 @@ import (
 // These tests are located here, instead of the attestation package, so that we can import the attestation posting methods from the host without an import cycle
 func TestGetAttestationRecords(t *testing.T) {
 	ctx := t.Context()
-	defraNode, err := defra.StartDefraInstanceWithTestConfig(t, defra.DefaultConfig, defra.NewSchemaApplierFromProvidedSchema(`type AttestationRecord_SampleView {
+	defraNode, err := defra.StartDefraInstanceWithTestConfig(t, defra.DefaultConfig, defra.NewSchemaApplierFromProvidedSchema(`type AttestationRecord {
 		attested_doc: String @index
 		source_doc: String @index
 		CIDs: [String]
 		docType: String @index
-		count: Int @crdt(type: pcounter)
-	}`), "AttestationRecord_SampleView")
+		vote_count: Int @crdt(type: pcounter)
+	}`), "AttestationRecord")
 	require.NoError(t, err)
 	defer defraNode.Close(ctx)
 
@@ -29,18 +29,18 @@ func TestGetAttestationRecords(t *testing.T) {
 		
 		// Create AttestationRecord directly using GraphQL mutation
 		mutation := fmt.Sprintf(`mutation {
-			create_AttestationRecord_SampleView(input: {
+			create_AttestationRecord(input: {
 				attested_doc: "%s",
 				source_doc: "%s",
 				CIDs: ["%s", "%s"],
 				docType: "Block",
-				count: 1
+				vote_count: 1
 			}) {
 				attested_doc
 				source_doc
 				CIDs
 				docType
-				count
+				vote_count
 			}
 		}`, docId, sourceDocId, cids[0], cids[1])
 		
